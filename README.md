@@ -1,8 +1,8 @@
-# `dyna-pi`: Dyna Program Improvement
+# `dyna-pi`: Dynamic Program Improvement
 
 <img style="width: 40%" src="docs/logo.svg" align="right">
 
-The **dyna program improvement system** (`dyna-pi`) is an interactive tool for
+The **dynamic program improvement system** (`dyna-pi`) is an interactive tool for
 analyzing and improving dynamic programming algorithms.  We developed this tool
 because Finding a correct program with the optimal asymptotic runtime can be
 unintuitive, time-consuming, and error-prone.  `dyna-pi` aims to automate this
