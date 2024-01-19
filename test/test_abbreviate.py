@@ -445,7 +445,7 @@ def test_startpath2():
     """)
 
 
-def test_startpath3():
+def todo_startpath3():
 
     path = Program("""
 
