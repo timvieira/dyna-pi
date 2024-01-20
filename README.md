@@ -25,7 +25,7 @@ It is also part of the broader [Dyna project](https://dyna.org/).
 
 
 **Notice.**  This code release is in its early stages and might have some rough edges.
-We welcome feedback and contributions through pull requests and our [issue tracker](http://github.com/timvieira/dyna-pi/issues).
+We welcome feedback and contributions through pull requests, email, and our [issue tracker](http://github.com/timvieira/dyna-pi/issues).
 
 
 ## Quick Start
