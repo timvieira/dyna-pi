@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name='dyna',
-      version='1.0',
+      version='0.9',
       description='',
       author='Tim Vieira',
       install_requires=[
@@ -17,6 +17,7 @@ setup(name='dyna',
           'graphviz',
           'rich',
           'IPython',
+          'svgling',
           # -------------------------------------------------------------------
           # development
           'coveragepy',

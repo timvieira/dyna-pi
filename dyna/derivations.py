@@ -3,7 +3,6 @@ Derivations
 """
 
 import re
-
 from arsenal import colors, iterview
 from collections import defaultdict
 from IPython.display import HTML
@@ -12,6 +11,7 @@ from io import StringIO
 from dyna.term import covers, fresh, Product, unify
 from dyna.util import escape_str, escape_html, dot2svg, tikz, latex
 from dyna.rule import Rule, is_const
+from dyna import PrettyPrinter
 
 
 class Derivation(Rule):
@@ -184,6 +184,14 @@ class Derivation(Rule):
         traverse(self)
         f.write('}')
         return f.getvalue()
+
+    def draw_svgling(self):
+        from svgling import draw_tree
+        pp = PrettyPrinter()
+        def f(d):
+            if not isinstance(d, Derivation): return pp(d)
+            return [pp(d.head), *map(f, d.body)]
+        return draw_tree(f(self))
 
 
 #_______________________________________________________________________________
