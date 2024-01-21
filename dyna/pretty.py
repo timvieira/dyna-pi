@@ -171,7 +171,7 @@ class PrettyPrinter:
                 def wrap(z):
                     if isinstance(z, _Rule): return parens(z)
                     if not isinstance(z, (Var, Term)) and self.color:
-                        return Escape(colors.magenta % (z,))
+                        return Escape(colors.render(colors.magenta % (z,)))
                     return z
 
                 B = wrap(x.body[0])
