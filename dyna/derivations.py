@@ -109,6 +109,7 @@ class Derivation(Rule):
     def _repr_html_(self):
         #return self.render_tikz()
         return self.to_forest()._repr_svg_()
+        #return self.draw_svgling()._repr_svg_()
 
     def render_tikz(self):
         return self.to_tikz().to_svg()
@@ -127,7 +128,7 @@ class Derivation(Rule):
     def to_tikz(self):
 
         def f(d):
-            if Derivation.base(d): return f'{{{tikz.escape(d)}}}'
+            if Derivation.base(d): return r'{\color{magenta}%s}' % tikz.escape(d)
             body = " ".join(f(b) for b in d.body)
             return f'[.{{{tikz.escape(d.head)}}} {body} ]'
 
@@ -262,7 +263,7 @@ class Derivations(list):
         "render `Derivation`s with LaTeX's `forest` package."
 
         def f(d):
-            if Derivation.base(d): return f'[{label_fn(d)}]'
+            if Derivation.base(d): return r'[{\color{magenta}%s}]' % (label_fn(d),)
             body = " ".join(f(b) for b in d.body)
             return f'[{{{label_fn(d.head)}}} {body}]'
 

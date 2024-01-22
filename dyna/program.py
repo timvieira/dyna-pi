@@ -185,6 +185,55 @@ class Program:
 #
 #        return output
 
+
+    def _repr_html_(self):
+        header = """
+        <style>
+        .container {
+            display: flex;
+            font-family: monospace; /* Consistent font family */
+            border: 1px solid #eee; /* Thin muted black border */
+            font-size: 14px !important; /* Consistent font size */
+        }
+
+        #line-numbers, #code {
+            line-height: 1.5em; /* Consistent line height */
+            margin: 0; /* Reset margin */
+            padding: 5px; /* Consistent padding */
+        }
+
+        #line-numbers {
+            text-align: right;
+            user-select: none;
+            padding-right: 10px; /* Additional padding for separation */
+            color: #b3777f;
+            border-right: 1px solid #eee; /* Thin muted black border */
+            margin-right: 10px;
+        }
+
+        #code {
+            white-space: pre-wrap;
+            overflow-x: auto; /* For horizontal scrolling */
+        }
+        </style>
+        """
+
+        from ansi2html import Ansi2HTMLConverter
+        lines = '<br>'.join(map(str, range(len(self))))
+        c = Ansi2HTMLConverter(inline=True, line_wrap=False, markup_lines=False).convert
+
+        code = '\n'.join(pp(r, color='html') + '.' for r in self)
+
+        return f"""
+{header}
+<div id="my-container" class="container">
+<div id="line-numbers">{lines}</div>
+<pre id="code">
+{code}
+</pre>
+</div>
+"""
+
     #___________________________________________________________________________
     # Cost functions
 
@@ -804,6 +853,10 @@ class Program:
         return self._coarse_graph().g
 
     def coarse_hypergraph(self):
+        return self._coarse_graph().h
+
+    # Experimental
+    def draw(self):
         return self._coarse_graph().h
 
     #___________________________________________________________________________

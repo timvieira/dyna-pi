@@ -6,8 +6,9 @@ Pretty printer for term (term, var, rule, constants, etc)
 
 import re
 from dyna.term import Var, Term, snap, NIL, snap, vars, OrderedSet
+from dyna.rule import Rule
 from dyna.syntax import ops, ChainedCompare, BinOp, UnaryOp
-from arsenal import colors
+#from arsenal import colors
 from arsenal.terminal import superscript, subscript
 
 
@@ -62,6 +63,26 @@ class Escape:
         return self.x
 
 
+class html_colors:
+    magenta = '<span style="color: #aa6699;">%s</span>'
+    blue = '<span style="color: blue;">%s</span>'
+    red = '<span style="color: red;">%s</span>'
+    green = '<span style="color: green;">%s</span>'
+    render = lambda x: x
+
+
+class no_colors:
+    magenta = '%s'
+    blue = '%s'
+    red = '%s'
+    green= '%s'
+    render = lambda x: x
+
+
+import arsenal
+ansi_colors = arsenal.colors
+
+
 class PrettyPrinter:
     "Stateful pretty printer."
 
@@ -69,8 +90,17 @@ class PrettyPrinter:
         if vs is None: vs = {}
         self.vs = vs
         self.kwargs = kwargs
-        self.color = color
         self.var_color = {}
+        self.color = None
+        self.set_color(color)
+
+    def set_color(self, color):
+        if color is True:
+            self.color = ansi_colors
+        elif color == 'html':
+            self.color = html_colors
+        else:
+            self.color = no_colors
 
     def print(self, *args, **kwargs):
         print(' '.join(a if isinstance(a, str) else self(a)
@@ -79,7 +109,7 @@ class PrettyPrinter:
     def __call__(self, x, color=None):
         if color is not None:
             was = self.color
-            self.color = color
+            self.set_color(color)
             y = self.wrap(x)
             self.color = was
             return y
@@ -87,7 +117,6 @@ class PrettyPrinter:
             return self.wrap(x)
 
     def wrap(self, x):
-        from dyna.rule import Rule as _Rule
         x = snap(x)
 
         #assert x is not None
@@ -126,10 +155,7 @@ class PrettyPrinter:
                     # later instance get an ugly auto-generated name
                     self.vs[x.name][id(x)] = f'${x.name}{dups}'
 
-            if self.color:
-                return self.var_color.get(id(x), '%s') % self.vs[x.name][id(x)]
-            else:
-                return self.vs[x.name][id(x)]
+            return self.var_color.get(id(x), '%s') % self.vs[x.name][id(x)]
 
         elif isinstance(x, bool):
             return str(x).lower()   # booleans and null are lower case
@@ -139,7 +165,7 @@ class PrettyPrinter:
             x = f'"{x[1:-1]}"'   # TODO: need to redo escapes
             return x
 
-        elif isinstance(x, _Rule):
+        elif isinstance(x, Rule):
 
             # enable variable coloring in rules
             # TODO: disable head variable coloring for nested rules
@@ -150,13 +176,18 @@ class PrettyPrinter:
 #                for v in (hs | bs):
 #                    var_color[id(v)] = colors.white
                 # local variables are highlighted in grey
-                for v in local:
-                    self.var_color[id(v)] = colors.green
-                for v in hs:
-                    self.var_color[id(v)] = colors.blue
-                # non-range-restricted variables are highlighted in red.
-                for v in (hs - bs):
-                    self.var_color[id(v)] = colors.dark.white
+
+                for v in vars(x):
+                    self.var_color[id(v)] = self.color.green
+                
+#                for v in local:
+#                    self.var_color[id(v)] = self.color.green
+#                for v in hs:
+#                    self.var_color[id(v)] = self.color.green
+#                    self.var_color[id(v)] = colors.blue
+#                # non-range-restricted variables are highlighted in red.
+#                for v in (hs - bs):
+#                    self.var_color[id(v)] = self.color.dark.white
 
             # put parens around heads that are binary operators
             # TODO: handle other cases as well, e.g., unary operators
@@ -169,16 +200,26 @@ class PrettyPrinter:
             if x.body:
 
                 def wrap(z):
-                    if isinstance(z, _Rule): return parens(z)
-                    if not isinstance(z, (Var, Term)) and self.color:
-                        return Escape(colors.render(colors.magenta % (z,)))
+                    if isinstance(z, Rule): return parens(z)
+                    if not isinstance(z, (Var, Term)):
+#                        if hasattr(z, 'fsa'):
+#                            return Escape(f'<div style="display: inline; border:thin solid red;">{z.fsa.min()._repr_html_()}</div>')
+#                        if hasattr(z, '_repr_html_'):
+#                            return z._repr_html_()
+#                        elif hasattr(z, '_repr_svg_'):
+#                            return z._repr_svg_()
+#                        else:
+                        return Escape(self.color.render(self.color.magenta % (z,)))
+
                     return z
 
                 B = wrap(x.body[0])
                 for i in range(1, len(x.body)):
                     B = Term('*', B, wrap(x.body[i]))
 
-                return f'{pre}{h} += {self(B)}'
+                aggr = self.color.blue % '+='
+
+                return f'{pre}{h} {aggr} {self(B)}'
             else:
                 return f'{pre}{h}'
 
@@ -195,13 +236,7 @@ class PrettyPrinter:
         if not isinstance(fn, str):
             return f'{self(fn)}({",".join(self(y) for y in x.args)})'
 
-#        elif isinstance(x, PrologRule):
-#            if x.body == Term(','):
-#                return f'{self(x.head)}.'
-#            else:
-#                return f'{self(x.head)} :- {self(x.body)}.'
-
-#        elif isinstance(x, _Rule):
+#        elif isinstance(x, Rule):
 #            if x.body:
 #                return f'{self(x.head)} += {" * ".join(self(b) for b in x.body)}.'
 #            else:

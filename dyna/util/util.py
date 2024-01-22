@@ -9,6 +9,25 @@ from IPython.display import display, SVG, Image, HTML
 from path import Path
 
 
+def format_table(rows, headings=None, table_style=''):
+    def fmt(x):
+        try:
+            return x._repr_html_()
+        except AttributeError:
+            try:
+                return x._repr_svg_()
+            except AttributeError:
+                return str(x)
+    return (
+        f'<table style="{table_style}">'
+         + ('<tr style="font-weight: bold;">' + ''.join(f'<th>{x}</th>' for x in headings) +'</tr>' if headings else '')
+         + ''.join(f'<tr>' + ''.join(f'<td>{fmt(x)}</td>' for x in row) +  ' </tr>' for row in rows)
+         + '</table>'
+    )
+def display_table(*args, **kwargs):
+    display(HTML(format_table(*args, **kwargs)))
+
+    
 from collections import Counter
 def FrozenBag(elements):
     return frozenset(Counter(elements).items())

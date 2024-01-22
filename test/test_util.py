@@ -79,7 +79,7 @@ def test_tikz_derivations():
 \begin{document}
 \begin{forest}{for tree={font=\tt, l=0cm, l sep-=.25em}}
 [,phantom
-[{a} [{b} [1]] [{c} [1]]]
+[{a} [{b} [{\color{magenta}1}]] [{c} [{\color{magenta}1}]]]
 ]
 \end{forest}
 \end{document}
@@ -102,7 +102,7 @@ def test_program_graphs():
     c += 1.
 
     outputs: X.
-    
+
     """)
 
     h = p.coarse_hypergraph()
