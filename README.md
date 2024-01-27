@@ -30,7 +30,7 @@ We welcome feedback and contributions through pull requests, email, and our [iss
 
 ## Quick Start
 
-For a quick start, check out our [demo notebook](docs/Demo.ipynb) for an overview and basic usage instructions.
+For a quick start, check out our [demo notebook](docs/Demo.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/timvieira/dyna-pi/blob/main/docs/Demo.ipynb) for an overview and basic usage instructions.
 
 
 ## Installation
