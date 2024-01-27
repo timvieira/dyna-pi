@@ -5,13 +5,12 @@ setup(name='dyna',
       description='',
       author='Tim Vieira',
       install_requires=[
-          'arsenal',     # http://github.com/timvieira/arsenal
-          'semirings',   # http://github.com/timvieira/semirings
+          'arsenal>=3',       # http://github.com/timvieira/arsenal
+          'semirings>=0.3',   # http://github.com/timvieira/semirings
           'orderedset',
           'frozendict',
           'lark-parser',
           'ansi2html',
-          'networkx',
           'z3-solver',
           'sympy',
           'graphviz',

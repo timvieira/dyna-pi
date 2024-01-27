@@ -1,4 +1,3 @@
-#import networkx as nx
 import re
 import numpy as np
 import pylab as pl
@@ -36,13 +35,6 @@ from dyna.util import escape_str, graphviz, remove_ansi
 ##                g.add_node(j)
 ##                g.add_edge(i, j, label=a)
 ##        return g
-#
-##    def draw_nx(self):
-##        g = self.nx()
-##        pos = nx.layout.spring_layout(g)
-##        nx.draw_networkx_nodes(g, pos, node_color='orange')
-##        nx.draw_networkx_labels(g, pos)
-##        nx.draw_networkx_edges(g, pos, edgelist=g.edges)
 #
 #    def _repr_svg_(self):
 ##        return self.graphviz()._repr_svg_()
@@ -182,9 +174,7 @@ class Hypergraph:
 
         def escape(x):
             if isinstance(x, frozenset): x = set(x) or {}
-            x = str(x)
-            x = remove_ansi(x)
-            return escape_str(x).replace('$', '﹩')  # notebook seem to not like $ - probably mathjax
+            return escape_str(str(x)).replace('$', r'\$')  # notebook seem to not like $ - probably mathjax
 
         f = StringIO()
         print('digraph {', file=f)
@@ -209,7 +199,10 @@ class Hypergraph:
 
     def _repr_html_(self):
         "Visualize graphviz rendering in a Jupyter notebook."
-        return self.graphviz().to_svg()
+        svg = self.graphviz().to_svg()
+        # wrap the svg in a <pre> block to suppress MathJax.  The choice to
+        # suppress MathJax comes having $ in output that mysteriously disappears
+        return svg.replace('<svg ', '<pre style="margin:0; padding:0"><svg ') + '</pre>'
 
 
 class Graph:
@@ -309,28 +302,6 @@ class Graph:
             g.node(str(name(x)), label=escape(x))
 
         return g
-
-#    def show_networkx(self):
-#        import networkx as nx
-#        import matplotlib.pyplot as pl
-#        from arsenal.viz import name2color
-#
-#        G = nx.DiGraph()
-#        G.add_edges_from([(u,v) for u in self.nodes for v in self[u]])
-#
-#        pos = nx.spring_layout(G)
-#        nx.draw_networkx_edges(G, pos)
-#        nx.draw_networkx_labels(G, pos, font_size=16)
-#
-#        colors = name2color()
-#        for c in self:
-#            nx.draw_networkx_nodes(G, pos,
-#                                   nodelist=c,
-#                                   node_color=colors[c],
-#                                   node_size=500,
-#                                   alpha=1.0)
-#
-#        pl.show()
 
     def transitive_closure(self, reflexive=False):
         from dyna.execute.linear import kleene
