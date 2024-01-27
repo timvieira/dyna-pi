@@ -5,7 +5,9 @@ setup(name='dyna',
       description='',
       author='Tim Vieira',
       install_requires=[
-          'arsenal>=3',       # http://github.com/timvieira/arsenal
+          #'arsenal>=3',       # http://github.com/timvieira/arsenal
+          #'git+https://github.com/timvieira/arsenal',
+          'arsenal @ git+https://github.com/timvieira/arsenal',
           'semirings>=0.3',   # http://github.com/timvieira/semirings
           'orderedset',
           'frozendict',
