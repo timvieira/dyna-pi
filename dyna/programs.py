@@ -21,6 +21,14 @@ class ProgramCollection(list):
     def graph(self):
         return ProgramGraph(self)
 
+#    def _repr_html_(self):
+#        import pandas
+#        df = pandas.DataFrame({
+#            'program': self,
+#            'degree': [p.degree for p in self]
+#        })
+#        return df.style.format({'program': Program._repr_html_})._repr_html_()
+
     def add(self, x):
         self.append(x)
         return x
@@ -290,7 +298,10 @@ class ProgramGraph:
             self.add(x)
 
     def _repr_html_(self):
-        return self.render(set(), set())._repr_html_()
+        svg = self.render(set(), set())._repr_html_()
+        # wrap the svg in a <pre> block to suppress MathJax.  The choice to
+        # suppress MathJax comes having $ in output that mysteriously disappears
+        return svg.replace('<svg ', '<pre style="margin:0; padding:0;"><svg ') + '</pre>'
 
     def render(self, have_safe=None, want_safe=None, hypergraph=False):
 
@@ -300,14 +311,12 @@ class ProgramGraph:
         g = self.hg()
 
         def escape(x):
-            x = x.sort().__repr__(color=False, numbered=False, sep='\n', indent='',
-                                  open_brace=None, close_brace='')
-            x = re.sub(r'\033\[.*?m(.*?)\033\[0m', '\1', x)
-            return escape_str(x).replace('$', '﹩')  # notebook seem to not like $ - probably mathjax
+            x = x.sort().__repr__(color=False, numbered=False, sep='\n', indent='', open_brace=None, close_brace='')
+            return escape_str(x)
 
         f = StringIO()
         print('digraph {', file=f)
-        f.write('  node [fontname=Monospace,fontsize=10,shape=box,style=rounded,height=0,width=0,margin="0.055,0.042"];\n')
+        f.write('  node [fontname=Monospace,fontsize=10,textalign=left,shape=box,style=rounded,height=0,width=0,margin="0.055,0.042"];\n')
         f.write('  edge [arrowhead=vee,arrowsize=0.5,fontname=Monospace,fontsize=9];\n')
 
         ix = Integerizer()
