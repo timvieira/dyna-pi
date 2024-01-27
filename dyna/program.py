@@ -23,6 +23,7 @@ from dyna.term import (
 )
 from dyna.util import Hypergraph, Graph, FrozenBag, tarjan, instance_cache, InstanceCache
 from dyna.util.bucket_queue import BucketQueue
+from dyna.exceptions import DynaParserException
 
 
 class CostDegrees(tuple):
@@ -75,7 +76,11 @@ def to_collection(f):
 
 class Program:
     def __init__(self, rules='', inputs=None, outputs=None, semiring=None, has_builtins=True):
-        if isinstance(rules, str): rules, inputs, outputs = _parse(rules, inputs, outputs)
+        if isinstance(rules, str):
+            try:
+                rules, inputs, outputs = _parse(rules, inputs, outputs)
+            except DynaParserException as e:
+                raise DynaParserException(e) from None
 
         self.rules = list(rules)
         assert all(isinstance(r, Rule) for r in rules), rules
@@ -187,20 +192,13 @@ class Program:
 
 
     def _repr_html_(self):
-
-        from ansi2html import Ansi2HTMLConverter
-        lines = '<br>'.join(map(str, range(len(self))))
-        c = Ansi2HTMLConverter(inline=True, line_wrap=False, markup_lines=False).convert
-
-        code = '\n'.join(pp(r, color='html') + '.' for r in self)
-
-        return f"""
-<div style="display: flex; font-family: monospace; border: 1px solid #eee; font-size: 14px !important;">
-<div style="line-height: 1.5em; margin: 0; padding: 5px; text-align: right; user-select: none; padding-right: 10px; color: #b3777f; border-right: 1px solid #eee; margin-right: 10px;">{lines}</div>
-<pre style="line-height: 1.5em; margin: 0; padding: 5px; white-space: pre-wrap; overflow-x: auto;">
-{code}
-</pre>
-</div>
+        linenums = '<br>'.join(map(str, range(len(self))))
+        code = '<br/>'.join(pp(r, color='html') + '<span style="color: blue;">.</span>' for r in self)
+        return f"""\
+<div style="display: flex; font-family: monospace; border: 1px solid #eee; font-size: 14px !important; text-align: left !important; overflow-x: auto;">\
+<div style="line-height: 1.5em; margin: 0; padding: 5px; text-align: right; user-select: none; padding-right: 10px; color: #b3777f; border-right: 1px solid #eee; margin-right: 10px;">{linenums}</div>\
+<pre style="line-height: 1.5em; margin: 0; padding: 5px; overflow-x: auto; white-space: nowrap;">\
+{code}</pre></div>\
 """
 
     #___________________________________________________________________________
