@@ -35,11 +35,9 @@ For a quick start, check out our [demo notebook](docs/Demo.ipynb) [![Open In Col
 
 ## Installation
 
-To install Dyna from source, please follow these instuctions:
+To install `dyna-pi` using `pip` run:
 ```
-git clone git@github.com:timvieira/dyna-pi.git
-cd dyna-pi
-pip install -e .
+pip install -U "git+https://github.com/timvieira/dyna-pi"
 ```
 
 ## License
