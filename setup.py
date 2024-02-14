@@ -8,7 +8,7 @@ setup(name='dyna',
           #'arsenal>=3',       # http://github.com/timvieira/arsenal
           #'git+https://github.com/timvieira/arsenal',
           'arsenal @ git+https://github.com/timvieira/arsenal',
-          'semirings>=0.3',   # http://github.com/timvieira/semirings
+          'semirings @ git+https://github.com/timvieira/semirings',
           'orderedset',
           'frozendict',
           'lark-parser',
@@ -19,6 +19,7 @@ setup(name='dyna',
           'rich',
           'IPython',
           'svgling',
+          'pandas',
           # -------------------------------------------------------------------
           # development
           'coveragepy',
