@@ -188,13 +188,17 @@ def test_same():
         [a, b] = Program(r + '\n' + s)
 
         assert want in {True, False}
-        print('test', a, colors.green % want, b, end=' ')
+
+        print()
+        print(colors.yellow % 'test')
+        print(a)
+        print(b)
 
         have = a.same(b)
         if have == want:
-            print(colors.ok)
+            print(colors.ok, f'(have = want: {want})')
         else:
-            print(colors.fail, f'have: "{have}", want: "{want}"')
+            print(colors.fail, f'(have: {have} ≠ want: {want})')
 
 
     test_case(

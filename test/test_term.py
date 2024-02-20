@@ -560,7 +560,7 @@ def test_hash_and_eq():
 def test_pretty_print():
 
     def test(x, expect=None):
-        got = pp(term(x))
+        got = pp(term(x), color=False)
         expect = x if expect is None else expect
         if expect == got:
             print(colors.light.green % 'pass', expect,

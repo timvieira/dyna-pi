@@ -75,7 +75,7 @@ class no_colors:
     magenta = '%s'
     blue = '%s'
     red = '%s'
-    green= '%s'
+    green = '%s'
     render = lambda x: x
 
 
@@ -106,17 +106,7 @@ class PrettyPrinter:
         print(' '.join(a if isinstance(a, str) else self(a)
                        for a in args), **kwargs)
 
-    def __call__(self, x, color=None):
-        if color is not None:
-            was = self.color
-            self.set_color(color)
-            y = self.wrap(x)
-            self.color = was
-            return y
-        else:
-            return self.wrap(x)
-
-    def wrap(self, x):
+    def __call__(self, x):
         x = snap(x)
 
         #assert x is not None
@@ -169,25 +159,17 @@ class PrettyPrinter:
 
             # enable variable coloring in rules
             # TODO: disable head variable coloring for nested rules
-            if self.color:
-                bs = vars(x.body)
-                hs = vars(x.head)
-                local = bs - hs
-#                for v in (hs | bs):
-#                    var_color[id(v)] = colors.white
-                # local variables are highlighted in grey
+            bs = vars(x.body)
+            hs = vars(x.head)
+            local = bs - hs
 
-                for v in vars(x):
-                    self.var_color[id(v)] = self.color.green
-                
-#                for v in local:
-#                    self.var_color[id(v)] = self.color.green
-#                for v in hs:
-#                    self.var_color[id(v)] = self.color.green
-#                    self.var_color[id(v)] = colors.blue
-#                # non-range-restricted variables are highlighted in red.
-#                for v in (hs - bs):
-#                    self.var_color[id(v)] = self.color.dark.white
+            for v in vars(x):
+                self.var_color[id(v)] = self.color.green
+
+#            for v in (hs | bs): self.var_color[id(v)] = colors.white
+#            for v in local:     self.var_color[id(v)] = self.color.green
+#            for v in hs:        self.var_color[id(v)] = self.color.blue
+#            for v in (hs - bs): self.var_color[id(v)] = self.color.dark.white
 
             # put parens around heads that are binary operators
             # TODO: handle other cases as well, e.g., unary operators
