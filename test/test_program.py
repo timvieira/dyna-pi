@@ -23,6 +23,8 @@ def test_program_repr_html():
     p = Program("""
     goal += f(X).
     f(1).
+
+    output: goal.
     """)
     p._repr_html_()
 

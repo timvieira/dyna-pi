@@ -11,7 +11,7 @@ class CoarseGraph:
         self.program = p
         assert p.inputs is not None and p.outputs is not None
 
-        "run thru the program to establish a coarse-grained vocabulary of nodes"
+        # inspect the program to establish a coarse-grained vocabulary of nodes
         nodes = DisjointEstimate()
         for x in p.inputs.just_heads():
             nodes.add(x)
