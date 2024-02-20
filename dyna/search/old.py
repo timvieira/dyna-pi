@@ -19,7 +19,7 @@ from orderedset import OrderedSet
 
 from itertools import product
 
-from dyna import Program, TransformedProgram, Rule, is_const, fresh, Define
+from dyna import Program, TransformedProgram, Rule, is_const, fresh, Define, ProgramCollection
 
 
 class NoMoreEvals(Exception): pass
@@ -129,6 +129,10 @@ class Search:
 
     def __repr__(self):
         return f'{self.__class__.__name__} (cost={self.best_cost}) {self.best}'
+
+    @property
+    def collection(self):
+        return ProgramCollection(self.programs.values())
 
     def top(self, K=None):
         for x in sorted(self.log, key=lambda x: x['cost'])[:K]:

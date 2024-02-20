@@ -662,14 +662,14 @@ class Program:
             old = new
         return new
 
-    def _fc(self, old=None, proj=lambda p: p):
-        old = Program([], inputs=Program([]), outputs=Program([]), semiring=self.Semiring) if old is None else old
-        while True:
-            yield old
-            new = proj(self.step(old))
-            if new == old: break
-            old = new
-        return new
+#    def _fc(self, old=None, proj=lambda p: p):
+#        old = Program([], inputs=Program([]), outputs=Program([]), semiring=self.Semiring) if old is None else old
+#        while True:
+#            yield old
+#            new = proj(self.step(old))
+#            if new == old: break
+#            old = new
+#        return new
 
     def scc_solver(self, solver=1):
         # Run forward chaining in the Boolean semiring to approximate the set of hyperedges in P(D).
@@ -1411,7 +1411,6 @@ class Program:
     def slash(self, x, *args, **kwargs):
         "Apply the speculation transformation"
         from dyna.transform.slash import Slash
-        if isinstance(x, str): x = syntax.term(x)
         return Slash(self, x, *args, **kwargs)
 
     def lct(self, *args, **kwargs):

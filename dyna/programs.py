@@ -13,6 +13,7 @@ from dyna import term, unifies, covers, fresh, Hypergraph, MostGeneralSet
 from dyna.util import escape_str, graphviz, Edge, Hypergraph
 from dyna.program import Program, TransformedProgram, Define, inf
 
+import pandas
 
 
 class ProgramCollection(list):
@@ -21,13 +22,16 @@ class ProgramCollection(list):
     def graph(self):
         return ProgramGraph(self)
 
-#    def _repr_html_(self):
-#        import pandas
-#        df = pandas.DataFrame({
-#            'program': self,
-#            'degree': [p.degree for p in self]
-#        })
-#        return df.style.format({'program': Program._repr_html_})._repr_html_()
+    def _repr_html_(self):
+        #other_columns = {
+        #    'bigo': [p.prune().type_analysis().runtime().x._repr_latex_() for p in self]
+        #}
+        df = pandas.DataFrame({
+            'program': self,
+            'degree': [p.degree for p in self],
+            #**other_columns,
+        })
+        return df.style.format({'program': Program._repr_html_})._repr_html_()
 
     def add(self, x):
         self.append(x)

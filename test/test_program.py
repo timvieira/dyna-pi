@@ -19,6 +19,15 @@ from dyna import Program, CostDegrees, term, unifies, Rule, \
 #
 #    r = ss.race(run=f, tmin=0.001)
 
+def test_program_repr_html():
+    p = Program("""
+    goal += f(X).
+    f(1).
+    """)
+    p._repr_html_()
+
+    p.draw()
+
 
 def chain_of_cycles(T, a=0.9):
     return Program(

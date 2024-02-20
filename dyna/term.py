@@ -232,6 +232,7 @@ class Product(tuple):
             for (S, A, R) in self._covers(y, i+1, js - {j}, s.copy().cover(self[i], y[j])):
                 yield (S, {**A, j: i}, R)
 
+    # Note: this method is many used to test equality, but subsumption.  For subsumption use covers.
     def match_comm(self, other, i=0, js=None, s=Ellipsis):
         if js is None: js = frozenset(range(len(other)))
         if s is Ellipsis: s = Subst()
@@ -254,20 +255,20 @@ class Product(tuple):
             yield from self._match_comm(ys=ys, i=i+1, js=js - {j}, s=s.copy().cover(self[i], ys[j]))
 
     # TODO: subproduct and cover should have the same API
-    def subproduct(self, ys):
-        "enumerate continguous subproducts of `self` (for non-commutative semirings)."
-        xs = self
-        N = len(xs)
-        M = len(ys)
-        for j in range(M - N + 1):
-            s = Subst()
-            fail = False
-            for i in range(N):
-                if s.cover(xs[i], ys[j+i]) is None:
-                    fail = True
-                    break
-            if not fail:
-                yield s, j
+#    def subproduct(self, ys):
+#        "enumerate continguous subproducts of `self` (for non-commutative semirings)."
+#        xs = self
+#        N = len(xs)
+#        M = len(ys)
+#        for j in range(M - N + 1):
+#            s = Subst()
+#            fail = False
+#            for i in range(N):
+#                if s.cover(xs[i], ys[j+i]) is None:
+#                    fail = True
+#                    break
+#            if not fail:
+#                yield s, j
 
 
 class Term:

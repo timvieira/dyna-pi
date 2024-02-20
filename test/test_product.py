@@ -1,4 +1,3 @@
-# TODO: rename this module to test_product.py
 from arsenal import colors, ok
 from collections import Counter
 
@@ -10,8 +9,6 @@ from dyna.pretty import PrettyPrinter
 # TODO: support unifications and other theories:
 #  f(X,Y), X=Y` <==> f(X,X) <==> f(Y,Y)
 
-# TODO: memoize!
-
 # TODO: use subgoal bucketing (by some appropriate term signature) to speed-up
 # bigger matchings.
 
@@ -21,6 +18,39 @@ def check_covering(xs, ys, subst, alignment, verbose=False):
     for j,i in alignment.items():
         if verbose: print(' ', subst(xs[i]), '==', ys[j])
         assert subst(xs[i]) == ys[j]
+
+
+#def test_subproduct():
+#
+#    def test_case(a, b, want):
+#
+#        pp = PrettyPrinter()
+#        [_, a, b] = term(f'$covers(({a}), ({b}))', freshen=True)
+##        b = fresh(b)
+#        # Warning: assumes ,/2 not */2.
+#        a, b = (Product(flatten_op(a, '*')), Product(flatten_op(b, '*')))
+#        #assert want in {'<', '>', '=', '<>'}
+#        #print('test', a, colors.green % want, b)
+#        print(colors.yellow % 'test', pp(a), colors.yellow % 'vs', pp(b))
+#        assert vars(a).isdisjoint(vars(b))
+#
+#        solutions = set()
+#        for s, j in a.subproduct(b):
+#            print(f'  → {s.is_non_specializing()}: {pp(s)}')
+#            if s.is_non_specializing():
+#                solutions.add((j, frozenset(s.items())))
+#
+#        assert len(solutions) == want, [len(solutions), want]
+#
+#    test_case('f(X)', 'f(Y)', 1)
+#    test_case('f(X)', 'f(Y) * f(Y) * f(Z)', 3)
+#    test_case('f(X) * g(X)', 'h(Y) * f(Y) * g(Y) * f(Z)', 1)
+#    test_case('h(Y) * f(Y) * g(Y) * f(Z)', 'f(X) * g(X)', 0)
+#    test_case('f(I,J) * f(J,K)', 'f(A,B) * f(B,C) * f(C,D) * f(D,E)', 3)
+#    test_case('f(J,I) * f(J,K)', 'f(A,B) * f(B,C) * f(C,D) * f(D,E)', 0)
+#    test_case('f(J,K) * f(I,J)', 'f(A,B) * f(B,C) * f(C,D) * f(D,E)', 0)
+#    test_case('f(I,3) * f(3,K)', 'f(A,B) * f(B,C) * f(C,D) * f(D,E)', 0)
+#    test_case('f(I,J) * f(K,L)', 'f(A,B) * f(B,C) * f(C,D) * f(D,E)', 3)
 
 
 def test_match_comm():
@@ -53,6 +83,8 @@ def test_match_comm():
     test_case('f(X) * f(Y) * f(Z)', 'f(A) * f(B) * f(C)', 6)
     test_case('f(X) * f(Y) * f(Z)', 'f(1) * f(B) * f(C)', 0)
     test_case('f(X) * f(Y) * f(1)', 'f(1) * f(B) * f(C)', 2)
+
+    #test_case('f(I,J) * f(K,L)', 'f(A,B) * f(B,C) * f(C,D) * f(D,E)', 3)
 
 
 def test_covers_product():
