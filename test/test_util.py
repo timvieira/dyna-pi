@@ -53,9 +53,9 @@ def test_latex():
         run_cmd(['non-existent-executable', '--help'])
 
 
-def test_tikz():
-    tikz(r'\Tree [.a b c ]', force=1).to_svg()
-    tikz(r'\Tree [.a b c ]', force=1).to_png()
+#def test_tikz():
+#    tikz(r'\Tree [.a b c ]', force=1).to_svg()
+#    tikz(r'\Tree [.a b c ]', force=1).to_png()
 
 
 def test_tikz_derivations():

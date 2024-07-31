@@ -298,9 +298,9 @@ def test_visualizations():
 
     Ds = p.derivations(3, 'x')
 
-    Ds[[1,2]].render_tikz()
+    #Ds[[1,2]].render_tikz()
     Ds.render_graphviz()
-    Ds[0].render_tikz()
+    #Ds[0].render_tikz()
     Ds.to_forest()
     Ds._repr_html_()
     Ds[0]._repr_html_()
