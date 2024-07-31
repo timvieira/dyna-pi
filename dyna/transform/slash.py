@@ -1,9 +1,7 @@
-from arsenal import colors
 
 from dyna import (
-    Program, syntax, Derivation, Rule, Product, Term, term, TransformedProgram,
-    NotMatchesConstaint, fresh, covers, Var, unifies, vars, Subst, same, canonicalize,
-    unify, is_var, snap, not_matches3
+    syntax, Derivation, Rule, Product, Term, TransformedProgram,
+    fresh, covers, unifies, unify, not_matches3
 )
 
 

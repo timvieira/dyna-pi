@@ -1,7 +1,6 @@
 """
 Implementation the semi-naive update operator
 """
-import numpy as np
 from dyna import Program
 
 

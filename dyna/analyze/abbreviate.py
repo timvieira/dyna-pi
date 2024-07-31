@@ -3,12 +3,10 @@ Implementation of type-based abbreviation transformation.
 """
 
 from arsenal import colors
-import warnings
 
-from dyna.analyze import add_free_constraints
 from dyna import (
-    Program, Rule, PrettyPrinter, TransformedProgram, join_f, Term, vars, fresh,
-    is_var, Subst, snap, unify, covers, unifies, deref
+    Rule, PrettyPrinter, TransformedProgram, join_f, Term, vars, fresh,
+    Subst, snap
 )
 
 

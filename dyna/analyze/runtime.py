@@ -1,5 +1,4 @@
 import numpy as np
-import warnings
 from arsenal import colors
 
 from dyna import Program, Rule, fresh, vars, Term, unify, Subst

@@ -1,5 +1,5 @@
 import numpy as np
-from arsenal import colors, iterview, timelimit
+from arsenal import colors
 from collections import defaultdict
 
 from dyna import Program, NoDupsSet, fresh, Subst, unifies, covers, Var, vars, same, Symbol

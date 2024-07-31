@@ -1,5 +1,4 @@
 import z3
-import dyna
 import sympy
 from arsenal import colors
 from dyna import Program, Boolean

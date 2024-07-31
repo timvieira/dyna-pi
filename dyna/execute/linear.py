@@ -1,6 +1,6 @@
 import numpy as np
 from arsenal import Integerizer, colors
-from dyna import TransformedProgram, Program, Rule, Term, vars, canonicalize
+from dyna import TransformedProgram, Rule, Term, vars, canonicalize
 
 
 def kleene(A, semiring, reflexive=True):

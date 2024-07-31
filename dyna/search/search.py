@@ -1,16 +1,14 @@
 import numpy as np
 from arsenal import colors, take, Integerizer, timelimit
-from arsenal.maths.combinatorics import powerset
 from arsenal.datastructures.pdict import pdict
-from collections import Counter, defaultdict
+from collections import Counter
 from functools import lru_cache
 from time import time
 from itertools import product
 
 from dyna import (
     Program, TransformedProgram, Rule, Define, Fold, Unfold,
-    make_smt_measure, gen_functor, unifies, covers, fresh, Var,
-    ProgramCollection, MostGeneralSet
+    make_smt_measure, unifies, covers, fresh, ProgramCollection, MostGeneralSet
 )
 from dyna.transform.fold import prune_r_S
 from dyna.util import OrderedSet

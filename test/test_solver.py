@@ -1,9 +1,8 @@
 from arsenal.robust import Timeout
 from arsenal.assertions import assert_throws
-from arsenal import timeit
 
 from dyna.execute.solver import Solver
-from dyna import Program, MaxTimes, SolverLimitation, InstFault
+from dyna import Program, SolverLimitation, InstFault
 
 
 def test_budgets():

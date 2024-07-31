@@ -3,11 +3,10 @@ Programs and their associated methods.
 """
 
 import numpy as np
-from time import time
-from arsenal import timelimit, groupby2, iterview, colors, iterview
+from arsenal import colors
 from collections import defaultdict
 from functools import cached_property, wraps
-from itertools import count, product, combinations
+from itertools import count, combinations
 from semirings import base, Float
 
 from dyna.builtin import Builtins, BuiltinConstaint, NotMatchesConstaint
@@ -16,11 +15,11 @@ from dyna.pretty import PrettyPrinter, pp
 from dyna.rule import Rule, is_const
 from dyna.term import (
     fresh, Var, unify, snap, Term, unifies, vars, covers, gen_functor,
-    is_ground, canonicalize, is_var, Product, flatten, flatten_op, FreshCache,
-    deref, join_f, DisjointEstimate, MostGeneralSet, NoDupsSet,
+    is_ground, canonicalize, is_var, Product, flatten_op, FreshCache,
+    deref, join_f, NoDupsSet,
     Stream, ResultStream, Constant
 )
-from dyna.util import Hypergraph, Graph, FrozenBag, tarjan, instance_cache, InstanceCache
+from dyna.util import FrozenBag, tarjan, instance_cache, InstanceCache
 from dyna.util.bucket_queue import BucketQueue
 from dyna.util import OrderedSet
 from dyna.exceptions import DynaParserException

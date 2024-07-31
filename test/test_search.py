@@ -1,4 +1,3 @@
-from arsenal import colors
 from dyna import Program
 
 

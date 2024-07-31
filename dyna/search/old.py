@@ -7,14 +7,11 @@ Findings of the Association for Computational Linguistics: EMNLP 2021
 https://aclanthology.org/2021.findings-emnlp.322/
 
 """
-import numpy as np
 from time import time
 
 from arsenal import colors
-from arsenal.maths import argmin_random_tie
 from arsenal.maths.combinatorics import powerset
 
-from frozendict import frozendict
 
 from itertools import product
 
@@ -72,7 +69,8 @@ class Search:
             print(f'[{self.name}] stopped early')
 
             if 0:
-                import sys, traceback
+                import sys
+                import traceback
                 etype, evalue, tb = sys.exc_info()
                 tb = '\n'.join(traceback.format_exception(etype, evalue, tb))
                 print(colors.dark.white % '*'*80)

@@ -1,11 +1,8 @@
-import re
 import numpy as np
-import pylab as pl
 
-from arsenal import colors, Integerizer
-from collections import defaultdict, deque, namedtuple
+from arsenal import Integerizer
+from collections import defaultdict, namedtuple
 from io import StringIO
-from functools import cached_property
 
 from dyna.util import escape_str, graphviz, remove_ansi
 

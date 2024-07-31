@@ -4,15 +4,13 @@ Built-in relations.
 
 import numpy as np
 from dyna.term import (
-    unify, Var, Term, unifies, is_ground, deref, vars, snap, fresh, covers, is_var, Product,
+    unify, Var, Term, unifies, deref, snap, fresh, covers, is_var, Product,
     canonicalize
 )
 from dyna.rule import Rule
-from dyna.exceptions import InstFault, NotBuiltin
+from dyna.exceptions import InstFault
 from dyna import syntax
 #from dyna.util import to_cons, topython_list
-from collections import defaultdict
-from arsenal import colors
 
 
 def isbool(Q): return isinstance(Q, bool)

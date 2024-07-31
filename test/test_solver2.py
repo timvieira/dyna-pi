@@ -1,7 +1,7 @@
 import numpy as np
 from arsenal import assert_throws
 
-from dyna import Program, SolverLimitation, InstFault
+from dyna import Program, InstFault
 from dyna.execute.solver2 import Solver
 
 

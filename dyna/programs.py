@@ -1,7 +1,6 @@
 """
 Program collections
 """
-import re
 
 from arsenal import groupby2, iterview, colors, timelimit, Integerizer
 from time import time
@@ -9,7 +8,7 @@ from itertools import product
 from collections import defaultdict
 from io import StringIO
 
-from dyna import term, unifies, covers, fresh, Hypergraph, MostGeneralSet
+from dyna import Hypergraph
 from dyna.util import escape_str, graphviz, Edge, Hypergraph
 from dyna.program import Program, TransformedProgram, Define, inf
 

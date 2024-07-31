@@ -1,6 +1,6 @@
 from arsenal import colors
 
-from dyna import fresh, unify, vars, Rule, TransformedProgram, Constant, I
+from dyna import fresh, unify, TransformedProgram, Constant, I
 
 #______________________________________________________________________________
 # Support the elimination of non-range-restricted rules

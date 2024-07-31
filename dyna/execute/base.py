@@ -1,6 +1,4 @@
-from arsenal import colors
-from dyna import Program, Rule, term, Float, fresh, vars, Product, is_ground
-from dyna.program import cmps
+from dyna import Program, Rule, term, Float, fresh, Product
 from dyna.builtin import Builtins
 from arsenal.robust import timelimit, Timeout
 

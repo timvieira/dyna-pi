@@ -1,6 +1,6 @@
 from arsenal import colors
 
-from dyna import Program, vars, pp, Var
+from dyna import Program, vars, pp
 from dyna.analyze.runtime import type_bound, Simplify, Symbol
 from arsenal.maths.combinatorics import powerset
 

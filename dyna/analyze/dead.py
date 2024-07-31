@@ -1,10 +1,9 @@
 """
 Dead rule elimination
 """
-from arsenal import colors
 
-from dyna import Boolean, TransformedProgram, Program, Rule
-from dyna.term import fresh, Term, Product, DisjointEstimate
+from dyna import TransformedProgram, Program, Rule
+from dyna.term import fresh, Product, DisjointEstimate
 from dyna.util.graphs import Hypergraph
 
 

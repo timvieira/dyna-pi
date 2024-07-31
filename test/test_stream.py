@@ -1,4 +1,4 @@
-from dyna import Program, Rule, Product, term, flatten_op, fresh, ResultStream, I, Constant
+from dyna import Program, Product, term, Constant
 from semirings import MaxTimes
 
 

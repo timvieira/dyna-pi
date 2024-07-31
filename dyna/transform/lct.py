@@ -1,5 +1,4 @@
-from arsenal import colors
-from dyna import TransformedProgram, Derivation, Rule, Product, Term, fresh, covers, Var, unifies, unify, is_var
+from dyna import TransformedProgram, Derivation, Rule, Product, Term, fresh, covers, Var, unifies, unify
 from dyna import syntax
 from dyna.transform.slash import not_matches3
 

@@ -1,9 +1,7 @@
-from arsenal import colors
 from collections import Counter
-from dyna.term import Term, vars, same, canonicalize, fresh, snap, Var, Product, Subst, FAIL
+from dyna.term import Term, vars, canonicalize, fresh, snap, Var, Product, Subst, FAIL
 
 from functools import cached_property, lru_cache
-from collections import defaultdict
 from dyna.util import FrozenBag, OrderedSet
 
 def fn(x): return x.fn if isinstance(x, Term) else x

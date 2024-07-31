@@ -3,8 +3,8 @@ Constraint propagation
 """
 from arsenal import colors
 from dyna.pretty import PrettyPrinter
-from dyna.term import Term, fresh, vars, snap, Var, replace_in_expr, Subst, FAIL
-from dyna.program import Program, Rule, is_const
+from dyna.term import Term, fresh, Var, replace_in_expr, Subst, FAIL
+from dyna.program import Program
 from dyna.builtin import Builtins
 
 

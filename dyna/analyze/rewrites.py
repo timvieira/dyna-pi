@@ -7,9 +7,9 @@ from itertools import combinations
 from semirings import Boolean
 
 from dyna.pretty import PrettyPrinter
-from dyna.term import Term, fresh, vars, Subst, is_var, unify, generalizer, deref, MostGeneralSet
+from dyna.term import Term, fresh, vars, Subst, is_var, generalizer, deref, MostGeneralSet
 from dyna.program import Program, Rule
-from dyna.propagate import ConstraintPropagation, FAIL, scons
+from dyna.propagate import ConstraintPropagation, scons
 
 # We can encode fundeps with this scheme.  For example,
 # W=W' :- word(W,I,J), word(W',I,J').

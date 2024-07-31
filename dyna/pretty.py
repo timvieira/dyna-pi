@@ -5,11 +5,10 @@ Pretty printer for term (term, var, rule, constants, etc)
 #  19: $inst(2, p("<.>", '#I'', '#K'') / p(".", '#I'', '#K'')) += 1.0.
 
 import re
-from dyna.term import Var, Term, snap, NIL, snap, vars, OrderedSet
+from dyna.term import Var, Term, NIL, snap, vars, OrderedSet
 from dyna.rule import Rule
 from dyna.syntax import ops, ChainedCompare, BinOp, UnaryOp
 #from arsenal import colors
-from arsenal.terminal import superscript, subscript
 
 
 # TODO: tie in with the parser to see how whether the current functor is a known binop.

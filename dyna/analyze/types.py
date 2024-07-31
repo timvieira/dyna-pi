@@ -10,12 +10,10 @@ from arsenal import colors
 from itertools import combinations
 
 from dyna import (
-    pp as _pp, PrettyPrinter, Boolean, Rule, Program, deref,
-    TransformedProgram, vars, fresh, Term, same, unify, Subst, Var,
+    pp as _pp, PrettyPrinter, Boolean, Rule, Program, TransformedProgram, vars, fresh, Term, same, unify, Subst, Var,
     MostGeneralSet, snap
 )
 from dyna.analyze.rewrites import Rewrites
-from arsenal.maths.combinatorics import choose
 
 
 DEBUG = 0

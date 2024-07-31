@@ -1,4 +1,7 @@
-import os, hashlib, re, subprocess, webbrowser
+import hashlib
+import re
+import subprocess
+import webbrowser
 import numpy as np
 
 from ansi2html import Ansi2HTMLConverter
@@ -10,7 +13,6 @@ from path import Path
 
 
 import ipywidgets as widgets
-from IPython.display import display
 
 def interactive_forward_chaining(p):
     import dyna
@@ -89,7 +91,7 @@ def format_table(rows, headings=None, table_style=''):
     return (
         f'<table style="{table_style}">'
          + ('<tr style="font-weight: bold;">' + ''.join(f'<th>{x}</th>' for x in headings) +'</tr>' if headings else '')
-         + ''.join(f'<tr>' + ''.join(f'<td>{fmt(x)}</td>' for x in row) +  ' </tr>' for row in rows)
+         + ''.join('<tr>' + ''.join(f'<td>{fmt(x)}</td>' for x in row) +  ' </tr>' for row in rows)
          + '</table>'
     )
 

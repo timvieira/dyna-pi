@@ -1,6 +1,5 @@
-from arsenal import colors
 from dyna import (
-    fresh, vars, Term, TransformedProgram, Rule, Derivation, Product
+    fresh, vars, TransformedProgram, Rule, Derivation, Product
 )
 from functools import cached_property
 

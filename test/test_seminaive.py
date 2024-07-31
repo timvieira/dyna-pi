@@ -1,7 +1,6 @@
 """
 Tests for semi-naive bottom-up evaluation.
 """
-import numpy as np
 from dyna import Program, Symbol, Boolean
 
 

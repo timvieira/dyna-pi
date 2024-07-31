@@ -4,7 +4,6 @@ Derivations
 
 import re
 from arsenal import colors, iterview
-from collections import defaultdict
 from IPython.display import HTML
 from io import StringIO
 

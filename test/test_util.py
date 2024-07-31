@@ -2,7 +2,7 @@ import re
 from arsenal import assert_throws
 
 from dyna import Program
-from dyna.util import Graph, latex, tikz, run_cmd, render_groundings
+from dyna.util import Graph, latex, run_cmd, render_groundings
 
 
 def test_scc():

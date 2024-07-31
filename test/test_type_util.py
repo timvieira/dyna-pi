@@ -1,4 +1,4 @@
-from dyna import term, same, Program, covers
+from dyna import term, same, covers
 from arsenal import assert_throws
 from dyna import NoDupsSet, MostGeneralSet, DisjointEstimate
 

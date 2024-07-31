@@ -1,5 +1,5 @@
 from dyna import (
-    pp, Term, Var, unify, unifies, canonicalize, covers, is_ground, generalizer,
+    pp, Term, Var, unify, unifies, covers, is_ground, generalizer,
     intersect, same, Subst, canonicalize, deref, Product, gen_functor, fresh,
     PrettyPrinter, gen
 )

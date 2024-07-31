@@ -1,6 +1,6 @@
 import numpy as np
-from arsenal import colors, iterview
-from dyna import Program, unifies, Symbol, Derivation
+from arsenal import colors
+from dyna import Program, unifies, Symbol
 from dyna.term import NoDupsSet, fresh, Subst, unifies, covers, Var, vars, same
 
 

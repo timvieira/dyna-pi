@@ -2,19 +2,18 @@
 Dyna inference which supports nonground updates, but no other delayed constraints.
 """
 
-import numpy as np
 
 from arsenal.datastructures.heap import LocatorMaxHeap
 from arsenal import colors, Integerizer
 
 from dyna import (
-    Program, Boolean, term, SolverLimitation, unify, fresh, Term, unifies,
-    canonicalize, snap, covers, intersect, DisjointEstimate, is_ground,
+    unify, fresh, Term, canonicalize, snap, is_ground,
     InstFault
 )
 
 from dyna.builtin import NotMatchesConstaint
-from dyna.execute.base import BaseSolver, cmps
+from dyna.execute.base import BaseSolver
+from dyna.program import cmps
 
 
 class Solver(BaseSolver):

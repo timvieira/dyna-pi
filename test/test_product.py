@@ -1,7 +1,6 @@
 from arsenal import colors, ok
-from collections import Counter
 
-from dyna.term import vars, Var, Term, unify, Subst, FAIL, Product, flatten, flatten_op, fresh
+from dyna.term import vars, Product, flatten, flatten_op
 from dyna.syntax import term
 from dyna.pretty import PrettyPrinter
 

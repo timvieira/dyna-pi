@@ -8,14 +8,14 @@ it encounters either.
 
 from arsenal import colors, Integerizer
 from arsenal.datastructures.heap import LocatorMaxHeap  # Warning: BucketQueue takes argmin whilst LocatorMaxHeap takes argmax.
-from collections import Counter, defaultdict
+from collections import defaultdict
 
-from dyna.util.bucket_queue import BucketQueue
 from dyna import (
-    term, NotMatchesConstaint, SolverLimitation, InstFault, unify, fresh,
-    is_ground, Term, unifies, snap, syntax
+    NotMatchesConstaint, SolverLimitation, InstFault, unify, fresh,
+    is_ground, Term, snap
 )
-from dyna.execute.base import BaseSolver, tupleone, cmps
+from dyna.execute.base import BaseSolver, tupleone
+from dyna.program import cmps
 
 
 class Solver(BaseSolver):

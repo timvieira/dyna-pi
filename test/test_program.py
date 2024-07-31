@@ -1,6 +1,5 @@
 from arsenal import colors, assert_throws
-from arsenal.maths.combinatorics import choose
-from dyna import Program, CostDegrees, term, unifies, Rule, \
+from dyna import Program, CostDegrees, term, Rule, \
     ProgramCollection, DynaParserException, gen_functor
 
 
