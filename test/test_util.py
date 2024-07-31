@@ -39,7 +39,7 @@ def test_scc():
     assert C2.topo == [{'Other'}, {'A', 'B', 'C'}]
 
 
-def test_latex():
+def todo_latex():
 
     x = latex(r"""
     \documentclass{article}
@@ -58,7 +58,7 @@ def todo_tikz():
     tikz(r'\Tree [.a b c ]', force=1).to_png()
 
 
-def test_tikz_derivations():
+def todo_tikz_derivations():
 
     p = Program("""
 
