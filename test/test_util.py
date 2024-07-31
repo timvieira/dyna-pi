@@ -2,7 +2,7 @@ import re
 from arsenal import assert_throws
 
 from dyna import Program
-from dyna.util import Graph, latex, run_cmd, render_groundings
+from dyna.util import Graph, latex, run_cmd, render_groundings, tikz
 
 
 def test_scc():
@@ -53,9 +53,9 @@ def test_latex():
         run_cmd(['non-existent-executable', '--help'])
 
 
-#def test_tikz():
-#    tikz(r'\Tree [.a b c ]', force=1).to_svg()
-#    tikz(r'\Tree [.a b c ]', force=1).to_png()
+def todo_tikz():
+    tikz(r'\Tree [.a b c ]', force=1).to_svg()
+    tikz(r'\Tree [.a b c ]', force=1).to_png()
 
 
 def test_tikz_derivations():
