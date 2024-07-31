@@ -1,9 +1,11 @@
 import numpy as np
 from arsenal import colors, take, Integerizer, timelimit
+from arsenal.maths.combinatorics import powerset
+from arsenal.datastructures.pdict import pdict
 from collections import Counter, defaultdict
-from orderedset import OrderedSet
 from functools import lru_cache
 from time import time
+from itertools import product
 
 from dyna import (
     Program, TransformedProgram, Rule, Define, Fold, Unfold,
@@ -11,9 +13,7 @@ from dyna import (
     ProgramCollection, MostGeneralSet
 )
 from dyna.transform.fold import prune_r_S
-from itertools import product
-from arsenal.maths.combinatorics import powerset
-from arsenal.datastructures.pdict import pdict
+from dyna.util import OrderedSet
 
 
 class Agenda:

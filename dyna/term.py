@@ -2,8 +2,8 @@
 Generic term representation
 """
 
-from orderedset import OrderedSet
 from contextlib import contextmanager
+from dyna.util import OrderedSet
 
 
 OCCURS_CHECK_ENABLED = True

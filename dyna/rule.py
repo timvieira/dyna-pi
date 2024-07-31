@@ -1,12 +1,10 @@
 from arsenal import colors
 from collections import Counter
-from orderedset import OrderedSet
-
 from dyna.term import Term, vars, same, canonicalize, fresh, snap, Var, Product, Subst, FAIL
 
 from functools import cached_property, lru_cache
 from collections import defaultdict
-from dyna.util import FrozenBag
+from dyna.util import FrozenBag, OrderedSet
 
 def fn(x): return x.fn if isinstance(x, Term) else x
 
@@ -254,7 +252,7 @@ class RuleAnalyzer_:
         # goal(X,Y,Z) += f(X,Y,Z) also has no variables we can eliminate
         can_elim = OrderedSet()
         for v in self.local_vars:
-            if set(self.v2f[v]) < fs_with_vars:
+            if set(self.v2f[v]) < set(fs_with_vars):
                 can_elim.add(v)
         self.can_elim = can_elim
 

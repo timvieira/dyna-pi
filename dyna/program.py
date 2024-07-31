@@ -5,7 +5,6 @@ Programs and their associated methods.
 import numpy as np
 from time import time
 from arsenal import timelimit, groupby2, iterview, colors, iterview
-from orderedset import OrderedSet
 from collections import defaultdict
 from functools import cached_property, wraps
 from itertools import count, product, combinations
@@ -23,6 +22,7 @@ from dyna.term import (
 )
 from dyna.util import Hypergraph, Graph, FrozenBag, tarjan, instance_cache, InstanceCache
 from dyna.util.bucket_queue import BucketQueue
+from dyna.util import OrderedSet
 from dyna.exceptions import DynaParserException
 
 

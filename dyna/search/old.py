@@ -15,11 +15,11 @@ from arsenal.maths import argmin_random_tie
 from arsenal.maths.combinatorics import powerset
 
 from frozendict import frozendict
-from orderedset import OrderedSet
 
 from itertools import product
 
 from dyna import Program, TransformedProgram, Rule, is_const, fresh, Define, ProgramCollection
+from dyna.util import OrderedSet
 
 
 class NoMoreEvals(Exception): pass
