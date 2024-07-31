@@ -18,7 +18,6 @@ setup(name='dyna',
           'IPython',
           'svgling',
           'pandas',
-          'orderedset',
           # -------------------------------------------------------------------
           # development
           'coveragepy',
