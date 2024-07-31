@@ -102,7 +102,7 @@ class CoarseGraph:
 
     def possibly_expansive(self):
         """
-        Using coarse-graind analysis, determine if this program is expansive (i.e.,
+        Using coarse-grain analysis, determine if this program is expansive (i.e.,
         is there an item that can transitively expand into two copies of
         itself).  Non-expansive programs can be solved in finite time with
         Newton's method.

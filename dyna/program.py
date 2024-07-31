@@ -662,14 +662,14 @@ class Program:
             old = new
         return new
 
-#    def _fc(self, old=None, proj=lambda p: p):
-#        old = Program([], inputs=Program([]), outputs=Program([]), semiring=self.Semiring) if old is None else old
-#        while True:
-#            yield old
-#            new = proj(self.step(old))
-#            if new == old: break
-#            old = new
-#        return new
+    def _fc(self, old=None, proj=lambda p: p):
+        old = Program([], inputs=Program([]), outputs=Program([]), semiring=self.Semiring) if old is None else old
+        while True:
+            yield old
+            new = proj(self.step(old))
+            if new == old: break
+            old = new
+        return new
 
     def scc_solver(self, solver=1):
         # Run forward chaining in the Boolean semiring to approximate the set of hyperedges in P(D).
@@ -1236,7 +1236,7 @@ class Program:
         Unfold this program until all of the `x` items are gone.
         Warning: This procedure may not terminate if `x` is recursive.
         """
-        if isinstance(x, str): x = term(x)
+        if isinstance(x, str): x = syntax.term(x)
         old = self
         while True:
             if verbosity > 0: print('unfold_all:', old)

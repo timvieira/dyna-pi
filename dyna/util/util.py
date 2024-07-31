@@ -9,6 +9,74 @@ from IPython.display import display, SVG, Image, HTML
 from path import Path
 
 
+import ipywidgets as widgets
+from IPython.display import display
+
+def interactive_forward_chaining(p):
+    import dyna
+
+    chart = dyna.Program(inputs='')
+    iterates = [chart]
+    while True:
+        new_chart = p.step(chart)
+        iterates.append(new_chart)
+        if chart == new_chart: break
+        chart = new_chart
+
+    def my_update_function(current_index):
+        dyna.util.display_chart_and_groundings(p, iterates[current_index-1], iterates[current_index])
+
+    return FunctionDisplay(my_update_function, start=1, end=len(iterates)-1)
+
+
+# visualization utility used in demo
+class FunctionDisplay:
+    def __init__(self, update_function, start, end):
+        """
+        Initialize the display with a function and a range of values.
+
+        Parameters:
+        - update_function: A function that takes a single argument (the current index)
+          and updates the display based on this index.
+        - start: The starting value of the index.
+        - end: The ending value of the index.
+        """
+        self.update_function = update_function
+        self.current_index = start
+        self.start = start
+        self.end = end
+        self.output = widgets.Output()
+
+        # Initialize UI components
+        self.prev_button = widgets.Button(description='Prev')
+        self.next_button = widgets.Button(description='Next')
+        self.buttons = widgets.HBox([self.prev_button, self.next_button])
+
+        # Setup event handlers
+        self.prev_button.on_click(self.on_prev_clicked)
+        self.next_button.on_click(self.on_next_clicked)
+
+        # Display the initial UI setup
+        display(self.buttons, self.output)
+        self.update_display()
+
+    def on_prev_clicked(self, b):
+        if self.current_index > self.start:
+            self.current_index -= 1
+            self.update_display()
+
+    def on_next_clicked(self, b):
+        if self.current_index < self.end:
+            self.current_index += 1
+            self.update_display()
+
+    def update_display(self):
+        with self.output:
+            self.output.clear_output()
+            # Call the update function with the current index.
+            self.update_function(self.current_index)
+
+
 def format_table(rows, headings=None, table_style=''):
     def fmt(x):
         try:
@@ -24,16 +92,20 @@ def format_table(rows, headings=None, table_style=''):
          + ''.join(f'<tr>' + ''.join(f'<td>{fmt(x)}</td>' for x in row) +  ' </tr>' for row in rows)
          + '</table>'
     )
+
+
 def display_table(*args, **kwargs):
     display(HTML(format_table(*args, **kwargs)))
 
-    
+
 from collections import Counter
 def FrozenBag(elements):
     return frozenset(Counter(elements).items())
 
+
 def display_groundings(*args, **kwargs):
     return display(HTML(render_groundings(*args, **kwargs)))
+
 
 def render_groundings(self, chart=None, precision=None):
     "Show instaniations of program rules against chart."
@@ -74,16 +146,18 @@ def render_chart_and_groundings(self, chart, new_chart, **kwargs):
     <table style="width: 100%; border: thin solid black;"><tr><th style="text-align: center;">
       done {Ansi2HTMLConverter().convert(colors.mark(chart == new_chart))}
     </th></tr></table>
-    <table>
-    <tr>
-    <th style="text-align: left; min-width: 200px; border: thin solid black;">Computation graph</th>
-    </tr>
-    <tr>
-    <td>
-    {self.instantiate(chart).coarse_hypergraph()._repr_html_()}
-    </td>
-    </tr>
     """
+#    <table>
+#    <tr>
+#    <th style="text-align: left; min-width: 200px; border: thin solid black;">Computation graph</th>
+#    </tr>
+#    <tr>
+#    <td>
+#    {self.instantiate(chart).coarse_hypergraph()._repr_html_()}
+#    </td>
+#    </tr>
+#    </table>
+
 
 
 def display_chart_and_groundings(self, chart, new_chart, **kwargs):
