@@ -1,3 +1,5 @@
+![Tests](https://github.com/timvieira/dyna-pi/actions/workflows/pytest.yml/badge.svg)
+
 # `dyna-pi`: Dynamic Program Improvement
 
 <img style="width: 40%" src="docs/logo.svg" align="right">
