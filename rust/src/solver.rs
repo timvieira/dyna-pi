@@ -160,7 +160,6 @@ impl<S: Semiring> Solver<S> {
             trigger_idx,
             trigger_item,
             trigger_delta,
-            &S::zero(), // old value placeholder
         );
     }
 
@@ -174,7 +173,6 @@ impl<S: Semiring> Solver<S> {
         trigger_idx: Option<usize>,
         trigger_item: Option<&Term>,
         trigger_delta: Option<&S>,
-        trigger_old: &S,
     ) {
         if idx >= rule.body.len() {
             // All subgoals matched - emit the head
@@ -203,7 +201,6 @@ impl<S: Semiring> Solver<S> {
                         trigger_idx,
                         trigger_item,
                         trigger_delta,
-                        trigger_old,
                     );
                 }
             }
@@ -223,21 +220,16 @@ impl<S: Semiring> Solver<S> {
             self.chart.query(&subgoal).collect()
         };
 
-        for (_item, value, match_subst) in matches {
+        for (_matched_item, value, match_subst) in matches {
             let mut new_subst = subst.clone();
             // Combine substitutions
             for (v, t) in match_subst.iter() {
                 new_subst.bind(*v, t.clone());
             }
 
-            // Use old value for positions before trigger to avoid double-counting
-            let contrib = if trigger_idx.map_or(false, |ti| idx < ti) {
-                trigger_old.clone()
-            } else {
-                value.clone()
-            };
-
-            let new_accum = accum.clone() * contrib;
+            // For non-trigger positions, use the current chart value
+            // The trigger position is handled separately above with delta
+            let new_accum = accum.clone() * value;
             self.join_body(
                 rule,
                 idx + 1,
@@ -246,13 +238,12 @@ impl<S: Semiring> Solver<S> {
                 trigger_idx,
                 trigger_item,
                 trigger_delta,
-                trigger_old,
             );
         }
     }
 
     /// Drive rules affected by an update to an item.
-    fn drive_rules(&mut self, item: &Term, old: &S, delta: &S) {
+    fn drive_rules(&mut self, item: &Term, delta: &S) {
         // Find rules with this functor/arity in their body
         let drivers = match self.driver_index.get_by_term(item) {
             Some(d) => d.clone(),
@@ -278,7 +269,6 @@ impl<S: Semiring> Solver<S> {
                 Some(subgoal_idx),
                 Some(item),
                 Some(delta),
-                old,
             );
         }
     }
@@ -306,10 +296,8 @@ impl<S: Semiring> Solver<S> {
                 None => continue, // Already processed
             };
 
-            // Get old value
+            // Get old value and compute new value
             let old = self.chart.get(&item).cloned().unwrap_or_else(S::zero);
-
-            // Compute new value
             let new = old.clone() + delta.clone();
 
             // Check for convergence
@@ -321,7 +309,7 @@ impl<S: Semiring> Solver<S> {
             self.chart.insert(item.clone(), new);
 
             // Drive affected rules
-            self.drive_rules(&item, &old, &delta);
+            self.drive_rules(&item, &delta);
         }
 
         self.stats.chart_size = self.chart.len();
@@ -424,7 +412,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Debug transitive closure - base rules work but recursive chaining needs fixing
     fn test_solver_transitive_closure() {
         // path(X, Y) += edge(X, Y).
         // path(X, Z) += edge(X, Y) * path(Y, Z).
@@ -524,5 +511,31 @@ mod tests {
         );
         let results = solver.query(&pattern);
         assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_chart_query_second_arg_bound() {
+        // Test query pattern with second argument bound
+        use crate::chart::Chart;
+
+        let mut chart: Chart<Float> = Chart::new();
+
+        // Add edges
+        chart.insert(make_edge(1, 2), Float::new(1.0));
+        chart.insert(make_edge(2, 3), Float::new(1.0));
+        chart.insert(make_edge(3, 4), Float::new(1.0));
+
+        // Query for edge(X, 2) - should find edge(1, 2)
+        let pattern = Term::compound(
+            "edge",
+            vec![Term::var(999), Term::constant(Value::Int(2))],
+        );
+
+        let results: Vec<_> = chart.query(&pattern).collect();
+        assert_eq!(results.len(), 1, "Should find one edge ending at 2");
+
+        let (item, _value, subst) = &results[0];
+        assert_eq!(item, &make_edge(1, 2));
+        assert_eq!(subst.get(999), Some(&Term::constant(Value::Int(1))));
     }
 }
