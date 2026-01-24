@@ -1,0 +1,4 @@
+/target/
+*.so
+*.dylib
+*.pyd
