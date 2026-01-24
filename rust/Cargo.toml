@@ -24,6 +24,10 @@ criterion = "0.5"
 name = "unify_bench"
 harness = false
 
+[[bench]]
+name = "intern_bench"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1
