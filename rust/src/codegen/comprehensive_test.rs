@@ -518,24 +518,6 @@ fn test_parse_all() {
     assert_eq!(parse_failures, 0, "{} programs failed to parse", parse_failures);
 }
 
-/// Test and debug comparison builtins
-#[test]
-fn test_debug_comparison() {
-    let source = r#"
-        goal(X, Y) += data(X) * data(Y) * (X < Y).
-    "#;
-
-    let program = parse_program(source).expect("Failed to parse");
-    println!("Parsed: {:?}\n", program);
-
-    let analysis = ProgramAnalysis::analyze(&program);
-    let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
-    let code = generator.generate(&program);
-
-    println!("Generated code:\n{}", code);
-}
-
 /// Test specific program and print generated code
 #[test]
 fn test_print_generated_code() {
