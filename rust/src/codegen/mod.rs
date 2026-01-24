@@ -86,5 +86,8 @@ pub mod generator;
 #[cfg(test)]
 mod compiler_test;
 
+#[cfg(test)]
+mod comprehensive_test;
+
 pub use analysis::ProgramAnalysis;
 pub use generator::{CodeGenerator, CodeGenConfig};

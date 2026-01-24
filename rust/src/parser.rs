@@ -77,6 +77,8 @@ enum Token {
 struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     position: usize,
+    /// Pending token to return (used when we consume a char but need to return it later)
+    pending: Option<Token>,
 }
 
 impl<'a> Lexer<'a> {
@@ -84,6 +86,7 @@ impl<'a> Lexer<'a> {
         Lexer {
             input: input.chars().peekable(),
             position: 0,
+            pending: None,
         }
     }
 
@@ -172,17 +175,12 @@ impl<'a> Lexer<'a> {
                     s.push('.');
                     s.push_str(&self.read_while(|c| c.is_ascii_digit()));
                 } else {
-                    // It's the end-of-rule dot, put it back by not consuming it
-                    // We already consumed the dot, so we need to handle this differently
-                    // Actually, we already advanced past the dot
-                    // Let's parse what we have so far
-                    // This is a bit tricky - we consumed the dot but it's not part of the number
-                    // For simplicity, parse as int and the dot will be the next token
+                    // It's the end-of-rule dot, not part of the number
+                    // We already consumed the dot, so save it as a pending token
                     let n = s.parse::<i64>()
                         .map_err(|_| ParseError::InvalidNumber(s.clone()))?;
-                    // We need to "unread" the dot - but we can't easily do that
-                    // Instead, we'll handle this case specially in the parser
-                    // For now, just return the int and the next call will get Dot
+                    // Store the dot as pending so it's returned next
+                    self.pending = Some(Token::Dot);
                     return Ok(Token::Int(n));
                 }
             }
@@ -216,6 +214,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn next_token(&mut self) -> ParseResult<Token> {
+        // Return pending token if we have one
+        if let Some(token) = self.pending.take() {
+            return Ok(token);
+        }
+
         self.skip_whitespace();
 
         match self.peek() {
