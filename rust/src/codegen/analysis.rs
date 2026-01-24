@@ -149,9 +149,10 @@ impl ProgramAnalysis {
         analysis
     }
 
-    /// Check if a functor is a builtin (starts with $)
+    /// Check if a functor is a builtin constraint (not a data constructor)
+    /// $cons and $nil are data constructors, not builtins
     pub fn is_builtin(functor: &str) -> bool {
-        functor.starts_with('$')
+        functor.starts_with('$') && functor != "$cons" && functor != "$nil"
     }
 
     fn analyze_term(&mut self, term: &Term, var_types: &FxHashMap<VarId, ArgType>) {

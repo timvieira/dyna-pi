@@ -681,13 +681,38 @@ impl CodeGenerator {
                     open_braces.push("if");
                     current_indent.push_str("    ");
 
-                    // Collect any new bindings from the builtin (for $is)
+                    // Collect any new bindings from the builtin (for $is and $unify)
                     if functor.as_ref() == "$is" {
                         if let Some(Term::Var(v)) = args.first() {
                             if !bindings.contains_key(v) {
                                 // The LHS of 'is' is being bound
                                 bindings.insert(*v, format!("_is_result_{}", idx));
                             }
+                        }
+                    } else if functor.as_ref() == "$unify" && args.len() == 2 {
+                        // For unification, bind any unbound variables
+                        match (&args[0], &args[1]) {
+                            (Term::Var(v1), Term::Var(v2)) => {
+                                let b1 = bindings.contains_key(v1);
+                                let b2 = bindings.contains_key(v2);
+                                if !b1 && b2 {
+                                    bindings.insert(*v1, format!("_unify_result_{}", idx));
+                                } else if b1 && !b2 {
+                                    bindings.insert(*v2, format!("_unify_result_{}", idx));
+                                }
+                                // If both unbound, we could bind both but skip for simplicity
+                            }
+                            (Term::Var(v), _) => {
+                                if !bindings.contains_key(v) {
+                                    bindings.insert(*v, format!("_unify_result_{}", idx));
+                                }
+                            }
+                            (_, Term::Var(v)) => {
+                                if !bindings.contains_key(v) {
+                                    bindings.insert(*v, format!("_unify_result_{}", idx));
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     continue;
@@ -848,8 +873,9 @@ impl CodeGenerator {
                 for (idx, subgoal) in rule.body.iter().enumerate() {
                     if idx != trigger_idx {
                         // Skip builtins - they're constraints, not value contributors
+                        // ($cons and $nil are data constructors, not builtins)
                         if let Term::Compound { functor: sg_functor, .. } = subgoal {
-                            if sg_functor.starts_with('$') {
+                            if sg_functor.starts_with('$') && sg_functor.as_ref() != "$cons" && sg_functor.as_ref() != "$nil" {
                                 continue;
                             }
                         }
@@ -973,6 +999,193 @@ impl CodeGenerator {
                 }
 
                 Some(code)
+            }
+
+            // Unification
+            "$unify" => {
+                if args.len() != 2 {
+                    return None;
+                }
+
+                let lhs = &args[0];
+                let rhs = &args[1];
+
+                match (lhs, rhs) {
+                    // Both are variables
+                    (Term::Var(v1), Term::Var(v2)) => {
+                        let b1 = bindings.get(v1);
+                        let b2 = bindings.get(v2);
+                        match (b1, b2) {
+                            (Some(e1), Some(e2)) => {
+                                // Both bound - check equality
+                                writeln!(code, "{}if {} == {} {{", indent, e1, e2).unwrap();
+                            }
+                            (Some(e1), None) => {
+                                // Bind v2 to v1's value
+                                writeln!(code, "{}let _unify_result_{} = {};", indent, subgoal_idx, e1).unwrap();
+                                writeln!(code, "{}if true {{", indent).unwrap();
+                            }
+                            (None, Some(e2)) => {
+                                // Bind v1 to v2's value
+                                writeln!(code, "{}let _unify_result_{} = {};", indent, subgoal_idx, e2).unwrap();
+                                writeln!(code, "{}if true {{", indent).unwrap();
+                            }
+                            (None, None) => {
+                                // Both unbound - create shared binding (simplified)
+                                writeln!(code, "{}// Both variables unbound - treating as always true", indent).unwrap();
+                                writeln!(code, "{}if true {{", indent).unwrap();
+                            }
+                        }
+                    }
+                    // LHS is variable, RHS is constant/term
+                    (Term::Var(v), _) => {
+                        if let Some(binding) = bindings.get(v) {
+                            // Variable is bound - check equality
+                            if let Some(rhs_expr) = self.term_to_expr(rhs, bindings) {
+                                writeln!(code, "{}if {} == {} {{", indent, binding, rhs_expr).unwrap();
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            // Variable is unbound - bind it
+                            if let Some(rhs_expr) = self.term_to_expr(rhs, bindings) {
+                                writeln!(code, "{}let _unify_result_{} = {};", indent, subgoal_idx, rhs_expr).unwrap();
+                                writeln!(code, "{}if true {{", indent).unwrap();
+                            } else {
+                                return None;
+                            }
+                        }
+                    }
+                    // LHS is constant/term, RHS is variable
+                    (_, Term::Var(v)) => {
+                        if let Some(binding) = bindings.get(v) {
+                            // Variable is bound - check equality
+                            if let Some(lhs_expr) = self.term_to_expr(lhs, bindings) {
+                                writeln!(code, "{}if {} == {} {{", indent, lhs_expr, binding).unwrap();
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            // Variable is unbound - bind it
+                            if let Some(lhs_expr) = self.term_to_expr(lhs, bindings) {
+                                writeln!(code, "{}let _unify_result_{} = {};", indent, subgoal_idx, lhs_expr).unwrap();
+                                writeln!(code, "{}if true {{", indent).unwrap();
+                            } else {
+                                return None;
+                            }
+                        }
+                    }
+                    // Both are constants/terms
+                    _ => {
+                        if let (Some(lhs_expr), Some(rhs_expr)) =
+                            (self.term_to_expr(lhs, bindings), self.term_to_expr(rhs, bindings)) {
+                            writeln!(code, "{}if {} == {} {{", indent, lhs_expr, rhs_expr).unwrap();
+                        } else {
+                            return None;
+                        }
+                    }
+                }
+
+                Some(code)
+            }
+
+            // Free/bound checks
+            "$free" => {
+                if args.len() != 1 {
+                    return None;
+                }
+                if let Term::Var(v) = &args[0] {
+                    if !bindings.contains_key(v) {
+                        // Variable is free - condition succeeds
+                        writeln!(code, "{}if true {{", indent).unwrap();
+                        Some(code)
+                    } else {
+                        // Variable is bound - condition fails
+                        writeln!(code, "{}if false {{", indent).unwrap();
+                        Some(code)
+                    }
+                } else {
+                    // Non-variable argument - always bound
+                    writeln!(code, "{}if false {{", indent).unwrap();
+                    Some(code)
+                }
+            }
+
+            "$bound" => {
+                if args.len() != 1 {
+                    return None;
+                }
+                if let Term::Var(v) = &args[0] {
+                    if bindings.contains_key(v) {
+                        // Variable is bound - condition succeeds
+                        writeln!(code, "{}if true {{", indent).unwrap();
+                        Some(code)
+                    } else {
+                        // Variable is free - condition fails
+                        writeln!(code, "{}if false {{", indent).unwrap();
+                        Some(code)
+                    }
+                } else {
+                    // Non-variable argument - always bound
+                    writeln!(code, "{}if true {{", indent).unwrap();
+                    Some(code)
+                }
+            }
+
+            // Not-matches check
+            "$not_matches" | "$neq" => {
+                if args.len() != 2 {
+                    return None;
+                }
+
+                // For simple cases where both are bound
+                if let (Some(lhs), Some(rhs)) = (
+                    self.term_to_expr(&args[0], bindings),
+                    self.term_to_expr(&args[1], bindings),
+                ) {
+                    writeln!(code, "{}if {} != {} {{", indent, lhs, rhs).unwrap();
+                    Some(code)
+                } else {
+                    // Can't determine at compile time - skip
+                    None
+                }
+            }
+
+            // Chained comparisons (0 <= X <= Y < 3)
+            "$chain" => {
+                // Each arg is a comparison term
+                let mut conditions = Vec::new();
+
+                for arg in args {
+                    if let Term::Compound { functor, args: cmp_args } = arg {
+                        if cmp_args.len() == 2 {
+                            let op = match functor.as_ref() {
+                                "$lt" => "<",
+                                "$le" => "<=",
+                                "$gt" => ">",
+                                "$ge" => ">=",
+                                "$eq" => "==",
+                                "$ne" => "!=",
+                                _ => continue,
+                            };
+
+                            if let (Some(lhs), Some(rhs)) = (
+                                self.term_to_expr(&cmp_args[0], bindings),
+                                self.term_to_expr(&cmp_args[1], bindings),
+                            ) {
+                                conditions.push(format!("{} {} {}", lhs, op, rhs));
+                            }
+                        }
+                    }
+                }
+
+                if !conditions.is_empty() {
+                    let combined = conditions.join(" && ");
+                    writeln!(code, "{}if {} {{", indent, combined).unwrap();
+                    Some(code)
+                } else {
+                    None
+                }
             }
 
             _ => None,

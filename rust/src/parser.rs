@@ -76,8 +76,9 @@ enum Token {
     Gt,          // >
     Le,          // <=
     Ge,          // >=
-    Eq,          // = or ==
+    Eq,          // == (numeric equality)
     Ne,          // != or \=
+    Unify,       // = (unification)
 
     // Keywords
     Is,          // is (arithmetic)
@@ -269,8 +270,10 @@ impl<'a> Lexer<'a> {
                         self.advance();
                         if self.peek() == Some('=') {
                             self.advance();
+                            Ok(Token::Eq)  // == is numeric equality
+                        } else {
+                            Ok(Token::Unify)  // = is unification
                         }
-                        Ok(Token::Eq)
                     }
                     '!' => {
                         self.advance();
@@ -340,9 +343,16 @@ impl<'a> Lexer<'a> {
                         self.advance();
                         self.read_number(c)
                     }
-                    c if c.is_ascii_uppercase() || c == '$' => {
+                    c if c.is_ascii_uppercase() => {
                         let name = self.read_while(|c| c.is_alphanumeric() || c == '_' || c == '\'');
                         Ok(Token::Var(name))
+                    }
+                    '$' => {
+                        // $-prefixed identifiers are treated as functors (builtins)
+                        // Include $ in the name, then read alphanumeric characters
+                        self.advance(); // consume the $
+                        let rest = self.read_while(|c| c.is_alphanumeric() || c == '_' || c == '\'');
+                        Ok(Token::Functor(format!("${}", rest)))
                     }
                     c if c.is_ascii_lowercase() => {
                         let name = self.read_while(|c| c.is_alphanumeric() || c == '_' || c == '\'');
@@ -581,6 +591,11 @@ impl<'a> Parser<'a> {
                         let rhs = self.parse_simple_term()?;
                         Term::compound("$ne", vec![term, rhs])
                     }
+                    Token::Unify => {
+                        self.advance()?;
+                        let rhs = self.parse_simple_term()?;
+                        Term::compound("$unify", vec![term, rhs])
+                    }
                     Token::Is => {
                         self.advance()?;
                         let rhs = self.parse_arith_expr()?;
@@ -599,7 +614,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parse a term, including 'is' expressions.
+    /// Parse a term, including 'is' expressions and chained comparisons.
     fn parse_term(&mut self) -> ParseResult<Term> {
         let term = self.parse_simple_term()?;
 
@@ -610,7 +625,44 @@ impl<'a> Parser<'a> {
             return Ok(Term::compound("$is", vec![term, expr]));
         }
 
+        // Check for comparison operators (for chained comparisons outside parentheses)
+        if matches!(self.current, Token::Lt | Token::Le | Token::Gt | Token::Ge | Token::Eq | Token::Ne) {
+            return self.parse_chained_comparison(term);
+        }
+
         Ok(term)
+    }
+
+    /// Parse a chained comparison like 0 <= X <= Y < 3.
+    /// Returns a $chain term containing all the individual comparisons.
+    fn parse_chained_comparison(&mut self, first: Term) -> ParseResult<Term> {
+        let mut comparisons = Vec::new();
+        let mut current_lhs = first;
+
+        loop {
+            let op = match &self.current {
+                Token::Lt => "$lt",
+                Token::Le => "$le",
+                Token::Gt => "$gt",
+                Token::Ge => "$ge",
+                Token::Eq => "$eq",
+                Token::Ne => "$ne",
+                _ => break,
+            };
+
+            self.advance()?;
+            let rhs = self.parse_simple_term()?;
+            comparisons.push(Term::compound(op, vec![current_lhs.clone(), rhs.clone()]));
+            current_lhs = rhs;
+        }
+
+        if comparisons.len() == 1 {
+            // Single comparison - return directly
+            Ok(comparisons.pop().unwrap())
+        } else {
+            // Multiple comparisons - wrap in $chain
+            Ok(Term::compound("$chain", comparisons))
+        }
     }
 
     /// Parse an arithmetic expression for the RHS of 'is'.

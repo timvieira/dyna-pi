@@ -400,41 +400,62 @@ const SUPPORTED_PROGRAMS: &[(&str, &str)] = &[
     ("arithmetic_combined", r#"
         range(X, Y) += data(X) * (Y is X + 1) * (X >= 0) * (Y < 10).
     "#),
+
+    // === Unification ===
+    ("unify_check", r#"
+        same(X, Y) += data(X) * data(Y) * (X = Y).
+    "#),
+
+    ("unify_bind", r#"
+        copy(X, Y) += data(X) * (Y = X).
+    "#),
+
+    ("unify_const", r#"
+        is_five(X) += data(X) * (X = 5).
+    "#),
+
+    // === Chained Comparisons ===
+    ("chained_le", r#"
+        in_range(X) += data(X) * 0 <= X <= 10.
+    "#),
+
+    ("chained_mixed", r#"
+        ascending(X, Y, Z) += data(X) * data(Y) * data(Z) * X < Y <= Z.
+    "#),
+
+    ("chained_triple", r#"
+        ordered(A, B, C, D) += data(A) * data(B) * data(C) * data(D) * A <= B <= C <= D.
+    "#),
+
+    // === Free/Bound Checks ===
+    ("bound_check", r#"
+        has_data(X) += data(X) * $bound(X).
+    "#),
+
+    ("not_equal", r#"
+        different(X, Y) += data(X) * data(Y) * $neq(X, Y).
+    "#),
 ];
 
 /// Programs that use features not yet supported
 /// (for documentation and future implementation)
 const UNSUPPORTED_PROGRAMS: &[(&str, &str, &str)] = &[
-    // Lists
+    // Lists - parsing works but code generation doesn't handle nested patterns in heads
     ("beta_path", r#"
         goal += beta([X|Xs]) * start(X).
         beta([X,Y|Xs]) += beta([Y|Xs]) * edge(X,Y).
         beta([X]) += stop(X).
-    "#, "List patterns not supported"),
+    "#, "Nested patterns in rule heads not yet supported"),
 
     ("list_sum", r#"
         asum([], 0).
         asum([X|Xs], S) :- asum(Xs, S2), S is S2 + X.
-    "#, "List patterns not supported"),
+    "#, "Nested patterns in rule heads not yet supported"),
 
-    ("chained_compare", r#"
-        goal += 0 <= X <= Y < 3.
-    "#, "Chained comparison syntax not supported"),
-
-    // Unification
-    ("unification", r#"
-        f(X, Y) += (X = Y) * 2.
-    "#, "Explicit unification not supported"),
-
-    // Negation/Special
-    ("negation", r#"
+    // Negation/Special - $not_matches with compound terms not yet supported
+    ("negation_complex", r#"
         goal += $not_matches(f(X), f(3)).
-    "#, "Negation/special predicates not supported"),
-
-    ("free_bound", r#"
-        f(X) := $free(X).
-        f(Y) += $bound(Y).
-    "#, "$free/$bound not supported"),
+    "#, "$not_matches with compound term patterns not supported"),
 
     // Type constraints
     ("type_fail", r#"
