@@ -7,7 +7,6 @@
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Interned symbol ID - replaces Rc<str> for O(1) comparison
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -414,15 +413,23 @@ mod tests {
 
         let mut hc = HcTable::new();
 
-        let t1 = hc.compound("f", vec![hc.int(1), hc.int(2)]);
-        let t2 = hc.compound("f", vec![hc.int(1), hc.int(2)]);
+        // Build terms by extracting intermediate values first
+        let int1 = hc.int(1);
+        let int2 = hc.int(2);
+        let t1 = hc.compound("f", vec![int1, int2]);
+
+        let int1 = hc.int(1);
+        let int2 = hc.int(2);
+        let t2 = hc.compound("f", vec![int1, int2]);
 
         // Pointer equality - O(1)!
         assert_eq!(t1, t2);
         assert!(std::rc::Rc::ptr_eq(&t1.0, &t2.0));
 
         // Different terms are different
-        let t3 = hc.compound("f", vec![hc.int(1), hc.int(3)]);
+        let int1 = hc.int(1);
+        let int3 = hc.int(3);
+        let t3 = hc.compound("f", vec![int1, int3]);
         assert_ne!(t1, t3);
     }
 
@@ -433,7 +440,8 @@ mod tests {
         let mut hc = HcTable::new();
 
         // Build nested term
-        let inner = hc.compound("g", vec![hc.int(1)]);
+        let int1 = hc.int(1);
+        let inner = hc.compound("g", vec![int1]);
         let t1 = hc.compound("f", vec![inner.clone(), inner.clone()]);
 
         // The inner terms share the same allocation

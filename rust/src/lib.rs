@@ -9,6 +9,7 @@
 //! - Python bindings via PyO3
 
 pub mod chart;
+pub mod codegen;
 pub mod intern;
 pub mod rule;
 pub mod semiring;

@@ -28,6 +28,10 @@ harness = false
 name = "intern_bench"
 harness = false
 
+[[bench]]
+name = "cky_compiled_bench"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1
