@@ -460,6 +460,31 @@ const SUPPORTED_PROGRAMS: &[(&str, &str)] = &[
         all_heads(H) += $cons(H, T).
     "#),
 
+    // === List Sugar Syntax ===
+    ("list_empty", r#"
+        is_empty([]).
+    "#),
+
+    ("list_singleton", r#"
+        singleton([X]) += item(X).
+    "#),
+
+    ("list_pair", r#"
+        pair([X, Y]) += first(X) * second(Y).
+    "#),
+
+    ("list_head_tail", r#"
+        head(H) += mylist([H | T]).
+    "#),
+
+    ("list_sum_base", r#"
+        asum([], 0).
+    "#),
+
+    ("list_sum_recursive", r#"
+        asum([X | Xs], S) += asum(Xs, S2) * (S is S2 + X).
+    "#),
+
     // === $not_matches with compound patterns ===
     ("not_matches_functor", r#"
         not_nil(L) += list(L) * $not_matches($nil, L).
@@ -486,18 +511,6 @@ const SUPPORTED_PROGRAMS: &[(&str, &str)] = &[
 /// Note: Most list, $not_matches, and $fail features are now supported.
 /// The remaining unsupported features are complex edge cases.
 const UNSUPPORTED_PROGRAMS: &[(&str, &str, &str)] = &[
-    // Lists with sugar syntax - need [X|Xs] desugaring in parser
-    ("beta_path", r#"
-        goal += beta([X|Xs]) * start(X).
-        beta([X,Y|Xs]) += beta([Y|Xs]) * edge(X,Y).
-        beta([X]) += stop(X).
-    "#, "List sugar syntax [X|Xs] needs parser support - use $cons(X, Xs) directly"),
-
-    ("list_sum", r#"
-        asum([], 0).
-        asum([X|Xs], S) :- asum(Xs, S2), S is S2 + X.
-    "#, "List sugar syntax [] and [X|Xs] needs parser support - use $nil and $cons directly"),
-
     // Complex $not_matches patterns - need runtime unification check
     ("negation_complex", r#"
         goal += $not_matches(f(X), f(3)).
@@ -583,7 +596,7 @@ fn test_parse_all() {
 /// Test specific program and print generated code
 #[test]
 fn test_print_generated_code() {
-    let programs_to_print = ["cky_full", "path_with_goal", "bilexical", "list_deconstruct"];
+    let programs_to_print = ["list_head_tail", "list_sum_recursive"];
 
     for name in programs_to_print {
         if let Some((_, source)) = SUPPORTED_PROGRAMS.iter().find(|(n, _)| *n == name) {

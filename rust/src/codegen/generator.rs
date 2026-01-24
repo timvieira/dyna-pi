@@ -266,6 +266,19 @@ impl CodeGenerator {
         gen
     }
 
+    /// Collect all variable IDs from a term
+    fn collect_term_vars(term: &Term, vars: &mut FxHashSet<VarId>) {
+        match term {
+            Term::Var(v) => { vars.insert(*v); }
+            Term::Compound { args, .. } => {
+                for arg in args {
+                    Self::collect_term_vars(arg, vars);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Compute if the program uses list operations ($cons, $nil patterns)
     fn compute_uses_lists(&self, program: &Program) -> bool {
         // Check struct fields
@@ -806,17 +819,110 @@ impl CodeGenerator {
         let trigger_subgoal = &rule.body[trigger_idx];
         let mut bindings: FxHashMap<VarId, String> = FxHashMap::default();
 
+        // Track open braces for proper closing
+        let mut open_braces: Vec<&str> = Vec::new();
+        let mut current_indent = base_indent.to_string();
+
+        // Handle trigger arguments - may include compound patterns that need deconstruction
         if let Term::Compound { args, .. } = trigger_subgoal {
             for (i, arg) in args.iter().enumerate() {
-                if let Term::Var(v) = arg {
-                    bindings.insert(*v, format!("item.arg{}", i));
+                match arg {
+                    Term::Var(v) => {
+                        bindings.insert(*v, format!("item.arg{}", i));
+                    }
+                    Term::Compound { functor: cf, args: cargs } => {
+                        // Compound pattern in trigger argument - need to deconstruct
+                        if cf.as_ref() == "$cons" && cargs.len() == 2 {
+                            writeln!(code, "{}// Deconstruct list from trigger arg{}", current_indent, i).unwrap();
+                            writeln!(code, "{}if let Some((_th_{}, _tt_{})) = self.get_cons(item.arg{} as usize) {{",
+                                current_indent, i, i, i).unwrap();
+                            open_braces.push("if-let");
+                            current_indent.push_str("    ");
+
+                            // Bind variables from the pattern
+                            if let Term::Var(v) = &cargs[0] {
+                                bindings.insert(*v, format!("_th_{}", i));
+                            }
+                            if let Term::Var(v) = &cargs[1] {
+                                bindings.insert(*v, format!("_tt_{}", i));
+                            }
+                        } else if cf.as_ref() == "$nil" {
+                            writeln!(code, "{}// Check trigger arg{} is nil", current_indent, i).unwrap();
+                            writeln!(code, "{}if self.is_nil(item.arg{} as usize) {{",
+                                current_indent, i).unwrap();
+                            open_braces.push("if");
+                            current_indent.push_str("    ");
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
 
-        // Track open braces for proper closing
-        let mut open_braces: Vec<&str> = Vec::new();
-        let mut current_indent = base_indent.to_string();
+        // Check head for $cons patterns with unbound variables - need to iterate over cons cells
+        // This must happen BEFORE processing body builtins that might use these variables
+        // But only if the variable is NOT bound by body subgoals (otherwise it's construction, not matching)
+        if let Term::Compound { args: head_args, .. } = &rule.head {
+            // Collect variables BOUND by body subgoals (excluding trigger and builtins)
+            // Builtins USE variables but don't BIND them (except $is which binds its LHS)
+            let mut body_bound_vars: FxHashSet<VarId> = FxHashSet::default();
+            for (idx, subgoal) in rule.body.iter().enumerate() {
+                if idx == trigger_idx {
+                    // Don't count trigger vars - those are already in bindings
+                    continue;
+                }
+                if let Term::Compound { functor, args } = subgoal {
+                    // Builtins don't bind variables (except $is binds its LHS)
+                    if functor.starts_with('$') {
+                        if functor.as_ref() == "$is" && !args.is_empty() {
+                            if let Term::Var(v) = &args[0] {
+                                body_bound_vars.insert(*v);
+                            }
+                        }
+                        // Other builtins don't bind new variables
+                        continue;
+                    }
+                    // Regular relation subgoal - its arguments are bound
+                    Self::collect_term_vars(subgoal, &mut body_bound_vars);
+                }
+            }
+
+            for (i, head_arg) in head_args.iter().enumerate() {
+                if let Term::Compound { functor: cf, args: cargs } = head_arg {
+                    if cf.as_ref() == "$cons" && cargs.len() == 2 {
+                        // Check if variables in this cons pattern are unbound
+                        let head_var = if let Term::Var(v) = &cargs[0] { Some(*v) } else { None };
+                        let tail_var = if let Term::Var(v) = &cargs[1] { Some(*v) } else { None };
+
+                        // Only iterate if:
+                        // 1. Head var is not bound (not in bindings AND not bound by body subgoals)
+                        // 2. Tail var is bound
+                        let head_bound_by_body = head_var.map_or(false, |v| body_bound_vars.contains(&v));
+                        let head_unbound = head_var.map_or(false, |v| !bindings.contains_key(&v) && !head_bound_by_body);
+                        let tail_bound = tail_var.map_or(true, |v| bindings.contains_key(&v));
+
+                        // If head is unbound but tail is bound, iterate over cons cells with matching tail
+                        if head_unbound && tail_bound {
+                            let tail_expr = tail_var
+                                .and_then(|v| bindings.get(&v).cloned())
+                                .unwrap_or_else(|| "/* unknown tail */".to_string());
+
+                            writeln!(code, "{}// Find cons cells with tail={} to bind head variable",
+                                current_indent, tail_expr).unwrap();
+                            writeln!(code, "{}for _hc_{} in self.cons_cells.iter().skip(1).filter(|c| c.tail == {} as usize) {{",
+                                current_indent, i, tail_expr).unwrap();
+                            open_braces.push("for");
+                            current_indent.push_str("    ");
+
+                            // Bind the head variable
+                            if let Some(v) = head_var {
+                                bindings.insert(v, format!("_hc_{}.head", i));
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Generate nested loops for other subgoals
         for (idx, subgoal) in rule.body.iter().enumerate() {
@@ -890,13 +996,24 @@ impl CodeGenerator {
                 let sg_struct = self.structs.get(&(functor.clone(), args.len()));
                 if let Some(sg_struct) = sg_struct {
                     // Find bound positions (where we have a binding for that variable)
+                    // Note: Compound patterns ($cons, $nil) are NOT considered bound - they need iteration + deconstruction
                     let bound_positions: Vec<usize> = args.iter()
                         .enumerate()
                         .filter_map(|(i, arg)| {
-                            if let Term::Var(v) = arg {
-                                if bindings.contains_key(v) { Some(i) } else { None }
-                            } else {
-                                Some(i) // Constants are always bound
+                            match arg {
+                                Term::Var(v) => {
+                                    if bindings.contains_key(v) { Some(i) } else { None }
+                                }
+                                Term::Const(_) => Some(i), // Constants are always bound
+                                Term::Compound { functor: cf, .. } => {
+                                    // Compound patterns need deconstruction, not key lookup
+                                    // Exception: if the whole compound is already bound
+                                    if cf.as_ref() == "$cons" || cf.as_ref() == "$nil" {
+                                        None // List patterns need iteration + deconstruction
+                                    } else {
+                                        None // Other compound patterns also need iteration
+                                    }
+                                }
                             }
                         })
                         .collect();
@@ -1024,10 +1141,39 @@ impl CodeGenerator {
 
                     // Collect new bindings from this subgoal
                     for (i, arg) in args.iter().enumerate() {
-                        if let Term::Var(v) = arg {
-                            if !bindings.contains_key(v) {
-                                bindings.insert(*v, format!("{}.arg{}", iter_var, i));
+                        match arg {
+                            Term::Var(v) => {
+                                if !bindings.contains_key(v) {
+                                    bindings.insert(*v, format!("{}.arg{}", iter_var, i));
+                                }
                             }
+                            Term::Compound { functor: cf, args: cargs } => {
+                                // Handle compound term argument patterns (e.g., $cons(H, T))
+                                if cf.as_ref() == "$cons" && cargs.len() == 2 {
+                                    // Deconstruct the list stored in this position
+                                    writeln!(code, "{}// Deconstruct list at arg{}", current_indent, i).unwrap();
+                                    writeln!(code, "{}if let Some((_h_{}, _t_{})) = self.get_cons({}.arg{} as usize) {{",
+                                        current_indent, i, i, iter_var, i).unwrap();
+                                    open_braces.push("if-let");
+                                    current_indent.push_str("    ");
+
+                                    // Bind variables from the pattern
+                                    if let Term::Var(v) = &cargs[0] {
+                                        bindings.insert(*v, format!("_h_{}", i));
+                                    }
+                                    if let Term::Var(v) = &cargs[1] {
+                                        bindings.insert(*v, format!("_t_{}", i));
+                                    }
+                                } else if cf.as_ref() == "$nil" {
+                                    // Check that the list is nil
+                                    writeln!(code, "{}// Check arg{} is nil", current_indent, i).unwrap();
+                                    writeln!(code, "{}if self.is_nil({}.arg{} as usize) {{",
+                                        current_indent, iter_var, i).unwrap();
+                                    open_braces.push("if");
+                                    current_indent.push_str("    ");
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
