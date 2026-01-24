@@ -435,32 +435,51 @@ const SUPPORTED_PROGRAMS: &[(&str, &str)] = &[
     ("not_equal", r#"
         different(X, Y) += data(X) * data(Y) * $neq(X, Y).
     "#),
+
+    // === $fail constraint ===
+    ("fail_constraint", r#"
+        bad(X) += data(X) * $fail.
+    "#),
+
+    // === Simple List Operations ===
+    ("list_nil_fact", r#"
+        empty($nil).
+    "#),
+
+    ("list_cons_construct", r#"
+        pair(X, Y, $cons(X, $cons(Y, $nil))) += data(X) * data(Y).
+    "#),
+
 ];
 
 /// Programs that use features not yet supported
 /// (for documentation and future implementation)
+///
+/// List patterns: The code generator supports list construction in heads
+/// (e.g., pair(X, Y, $cons(X, $cons(Y, $nil)))), but recursive list processing
+/// requires free variable enumeration over cons cells, which is not yet implemented.
 const UNSUPPORTED_PROGRAMS: &[(&str, &str, &str)] = &[
-    // Lists - parsing works but code generation doesn't handle nested patterns in heads
+    // Lists - recursive list patterns need enumeration of cons cells for free variables
     ("beta_path", r#"
         goal += beta([X|Xs]) * start(X).
         beta([X,Y|Xs]) += beta([Y|Xs]) * edge(X,Y).
         beta([X]) += stop(X).
-    "#, "Nested patterns in rule heads not yet supported"),
+    "#, "Free variables in list patterns need cons cell enumeration"),
 
     ("list_sum", r#"
         asum([], 0).
         asum([X|Xs], S) :- asum(Xs, S2), S is S2 + X.
-    "#, "Nested patterns in rule heads not yet supported"),
+    "#, "Free variables in list patterns need cons cell enumeration"),
 
     // Negation/Special - $not_matches with compound terms not yet supported
     ("negation_complex", r#"
         goal += $not_matches(f(X), f(3)).
     "#, "$not_matches with compound term patterns not supported"),
 
-    // Type constraints
-    ("type_fail", r#"
+    // Type constraints - $fail in head position
+    ("type_fail_head", r#"
         $fail :- k(X), n(X).
-    "#, "$fail and type constraints not supported"),
+    "#, "$fail in head position (type constraint) not supported"),
 ];
 
 #[test]

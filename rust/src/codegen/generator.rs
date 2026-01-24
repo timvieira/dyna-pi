@@ -119,6 +119,8 @@ pub enum RustType {
     Int { bits: u8, signed: bool },
     /// String/symbol (uses interned ID)
     SymbolId,
+    /// List ID (reference to Cons or Nil)
+    ListId,
 }
 
 impl RustType {
@@ -134,6 +136,7 @@ impl RustType {
             RustType::Int { bits: 64, signed: true } => "i64",
             RustType::Int { .. } => "i64",
             RustType::SymbolId => "u32",
+            RustType::ListId => "ListId",
         }
     }
 
@@ -164,7 +167,16 @@ impl RustType {
                 // Use symbol ID (u32)
                 RustType::SymbolId
             }
-            ArgType::Term { .. } | ArgType::Any => {
+            ArgType::Term { functor, .. } => {
+                // Check if it's a list type
+                if functor.as_ref() == "$cons" || functor.as_ref() == "$nil" {
+                    RustType::ListId
+                } else {
+                    // Use i64 as generic value type for other compound terms
+                    RustType::Int { bits: 64, signed: true }
+                }
+            }
+            ArgType::Any => {
                 // Use i64 as generic value type
                 RustType::Int { bits: 64, signed: true }
             }
@@ -402,6 +414,28 @@ impl CodeGenerator {
         writeln!(code, "use std::collections::VecDeque;").unwrap();
         writeln!(code).unwrap();
 
+        // Check if lists are used
+        let uses_lists = self.structs.values().any(|s| {
+            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
+            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
+        });
+
+        if uses_lists {
+            // List infrastructure
+            writeln!(code, "// ============ List Support ============").unwrap();
+            writeln!(code, "/// List ID - 0 is Nil, positive values index into cons_cells").unwrap();
+            writeln!(code, "pub type ListId = usize;").unwrap();
+            writeln!(code, "pub const NIL: ListId = 0;").unwrap();
+            writeln!(code).unwrap();
+            writeln!(code, "/// A cons cell: (head, tail)").unwrap();
+            writeln!(code, "#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]").unwrap();
+            writeln!(code, "pub struct ConsCell {{").unwrap();
+            writeln!(code, "    pub head: i64,").unwrap();
+            writeln!(code, "    pub tail: ListId,").unwrap();
+            writeln!(code, "}}").unwrap();
+            writeln!(code).unwrap();
+        }
+
         // Struct definitions
         writeln!(code, "// ============ Item Structs ============").unwrap();
         for gen_struct in self.structs.values() {
@@ -444,6 +478,18 @@ impl CodeGenerator {
         // Agenda
         writeln!(code, "    agenda: VecDeque<AgendaItem>,").unwrap();
 
+        // List support (if needed)
+        let uses_lists = self.structs.values().any(|s| {
+            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
+            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
+        });
+        if uses_lists {
+            writeln!(code, "    /// Cons cells table (index 0 is unused, NIL=0)").unwrap();
+            writeln!(code, "    cons_cells: Vec<ConsCell>,").unwrap();
+            writeln!(code, "    /// Map from cons cell content to ID for deduplication").unwrap();
+            writeln!(code, "    cons_lookup: FxHashMap<ConsCell, ListId>,").unwrap();
+        }
+
         writeln!(code, "}}").unwrap();
         writeln!(code).unwrap();
 
@@ -470,6 +516,9 @@ impl CodeGenerator {
 
         // Constructor
         code.push_str(&self.generate_constructor());
+
+        // List methods (if needed)
+        code.push_str(&self.generate_list_methods());
 
         // Update methods
         code.push_str(&self.generate_update_methods());
@@ -512,8 +561,74 @@ impl CodeGenerator {
         }
 
         writeln!(code, "            agenda: VecDeque::new(),").unwrap();
+
+        // List support initialization
+        let uses_lists = self.structs.values().any(|s| {
+            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
+            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
+        });
+        if uses_lists {
+            writeln!(code, "            cons_cells: vec![ConsCell {{ head: 0, tail: 0 }}], // index 0 unused").unwrap();
+            writeln!(code, "            cons_lookup: FxHashMap::default(),").unwrap();
+        }
+
         writeln!(code, "        }}").unwrap();
         writeln!(code, "    }}").unwrap();
+
+        code
+    }
+
+    /// Generate list helper methods
+    fn generate_list_methods(&self) -> String {
+        let mut code = String::new();
+
+        let uses_lists = self.structs.values().any(|s| {
+            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
+            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
+        });
+
+        if uses_lists {
+            writeln!(code, "\n    // ============ List Methods ============").unwrap();
+
+            // cons method - create or look up a cons cell
+            writeln!(code, "    /// Create or look up a cons cell").unwrap();
+            writeln!(code, "    pub fn cons(&mut self, head: i64, tail: ListId) -> ListId {{").unwrap();
+            writeln!(code, "        let cell = ConsCell {{ head, tail }};").unwrap();
+            writeln!(code, "        if let Some(&id) = self.cons_lookup.get(&cell) {{").unwrap();
+            writeln!(code, "            id").unwrap();
+            writeln!(code, "        }} else {{").unwrap();
+            writeln!(code, "            let id = self.cons_cells.len();").unwrap();
+            writeln!(code, "            self.cons_cells.push(cell);").unwrap();
+            writeln!(code, "            self.cons_lookup.insert(cell, id);").unwrap();
+            writeln!(code, "            id").unwrap();
+            writeln!(code, "        }}").unwrap();
+            writeln!(code, "    }}").unwrap();
+
+            // is_nil method
+            writeln!(code, "\n    /// Check if a list ID is nil").unwrap();
+            writeln!(code, "    #[inline]").unwrap();
+            writeln!(code, "    pub fn is_nil(&self, id: ListId) -> bool {{").unwrap();
+            writeln!(code, "        id == NIL").unwrap();
+            writeln!(code, "    }}").unwrap();
+
+            // is_cons method
+            writeln!(code, "\n    /// Check if a list ID is a cons cell").unwrap();
+            writeln!(code, "    #[inline]").unwrap();
+            writeln!(code, "    pub fn is_cons(&self, id: ListId) -> bool {{").unwrap();
+            writeln!(code, "        id != NIL && id < self.cons_cells.len()").unwrap();
+            writeln!(code, "    }}").unwrap();
+
+            // get_cons method
+            writeln!(code, "\n    /// Get the head and tail of a cons cell").unwrap();
+            writeln!(code, "    pub fn get_cons(&self, id: ListId) -> Option<(i64, ListId)> {{").unwrap();
+            writeln!(code, "        if id != NIL && id < self.cons_cells.len() {{").unwrap();
+            writeln!(code, "            let cell = &self.cons_cells[id];").unwrap();
+            writeln!(code, "            Some((cell.head, cell.tail))").unwrap();
+            writeln!(code, "        }} else {{").unwrap();
+            writeln!(code, "            None").unwrap();
+            writeln!(code, "        }}").unwrap();
+            writeln!(code, "    }}").unwrap();
+        }
 
         code
     }
@@ -895,19 +1010,7 @@ impl CodeGenerator {
                 let head_args: Vec<String> = args.iter()
                     .enumerate()
                     .map(|(i, arg)| {
-                        if let Term::Var(v) = arg {
-                            bindings.get(v)
-                                .map(|s| format!("{} as {}", s, head_struct.fields[i].1.type_name()))
-                                .unwrap_or_else(|| format!("/* unbound {} */", v))
-                        } else if let Term::Const(c) = arg {
-                            match c {
-                                Value::Int(n) => format!("{} as {}", n, head_struct.fields[i].1.type_name()),
-                                Value::Symbol(s) => format!("/* symbol {} */", s),
-                                _ => "/* const */".to_string(),
-                            }
-                        } else {
-                            "/* complex */".to_string()
-                        }
+                        self.term_to_head_arg(arg, &bindings, &head_struct.fields[i].1)
                     })
                     .collect();
 
@@ -1089,6 +1192,13 @@ impl CodeGenerator {
                 Some(code)
             }
 
+            // $fail - always fails, prevents rule from firing
+            "$fail" => {
+                // Generate code that will never execute (always false condition)
+                writeln!(code, "{}if false {{", indent).unwrap();
+                Some(code)
+            }
+
             // Free/bound checks
             "$free" => {
                 if args.len() != 1 {
@@ -1189,6 +1299,41 @@ impl CodeGenerator {
             }
 
             _ => None,
+        }
+    }
+
+    /// Convert a term to a head argument expression.
+    /// Handles variables, constants, and compound terms like $cons(X, Xs).
+    fn term_to_head_arg(&self, term: &Term, bindings: &FxHashMap<VarId, String>, rust_type: &RustType) -> String {
+        match term {
+            Term::Var(v) => {
+                bindings.get(v)
+                    .map(|s| format!("{} as {}", s, rust_type.type_name()))
+                    .unwrap_or_else(|| format!("/* unbound {} */", v))
+            }
+            Term::Const(c) => {
+                match c {
+                    Value::Int(n) => format!("{} as {}", n, rust_type.type_name()),
+                    Value::Symbol(s) => format!("/* symbol {} */", s),
+                    Value::Float(f) => format!("{} as {}", f.into_inner(), rust_type.type_name()),
+                    Value::Bool(b) => format!("{}", b),
+                    _ => "/* const */".to_string(),
+                }
+            }
+            Term::Compound { functor, args } => {
+                // Handle list constructors
+                if functor.as_ref() == "$nil" {
+                    "NIL".to_string()
+                } else if functor.as_ref() == "$cons" && args.len() == 2 {
+                    // Cons cell: construct using self.cons(head, tail)
+                    let head_expr = self.term_to_head_arg(&args[0], bindings, &RustType::Int { bits: 64, signed: true });
+                    let tail_expr = self.term_to_head_arg(&args[1], bindings, &RustType::ListId);
+                    format!("self.cons({}, {})", head_expr, tail_expr)
+                } else {
+                    format!("/* complex: {}(...) */", functor)
+                }
+            }
+            _ => "/* unknown */".to_string(),
         }
     }
 
