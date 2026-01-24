@@ -81,5 +81,7 @@
 
 pub mod analysis;
 pub mod cky_compiled;
+pub mod generator;
 
 pub use analysis::ProgramAnalysis;
+pub use generator::{CodeGenerator, CodeGenConfig};
