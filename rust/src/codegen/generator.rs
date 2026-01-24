@@ -119,8 +119,6 @@ pub enum RustType {
     Int { bits: u8, signed: bool },
     /// String/symbol (uses interned ID)
     SymbolId,
-    /// General value (uses enum)
-    Value,
 }
 
 impl RustType {
@@ -136,7 +134,6 @@ impl RustType {
             RustType::Int { bits: 64, signed: true } => "i64",
             RustType::Int { .. } => "i64",
             RustType::SymbolId => "u32",
-            RustType::Value => "Value",
         }
     }
 
@@ -163,13 +160,13 @@ impl RustType {
                 // Default to i64 for unbounded
                 RustType::Int { bits: 64, signed: true }
             }
-            ArgType::Symbol { values } => {
+            ArgType::Symbol { values: _ } => {
                 // Use symbol ID (u32)
                 RustType::SymbolId
             }
             ArgType::Term { .. } | ArgType::Any => {
-                // Need general value type
-                RustType::Value
+                // Use i64 as generic value type
+                RustType::Int { bits: 64, signed: true }
             }
         }
     }

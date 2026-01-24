@@ -83,5 +83,8 @@ pub mod analysis;
 pub mod cky_compiled;
 pub mod generator;
 
+#[cfg(test)]
+mod compiler_test;
+
 pub use analysis::ProgramAnalysis;
 pub use generator::{CodeGenerator, CodeGenConfig};
