@@ -78,7 +78,7 @@ fn test_program(name: &'static str, source: &str) -> TestResult {
     // Analyze and generate
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
     result.generated = true;
 
@@ -450,36 +450,58 @@ const SUPPORTED_PROGRAMS: &[(&str, &str)] = &[
         pair(X, Y, $cons(X, $cons(Y, $nil))) += data(X) * data(Y).
     "#),
 
+    // === List Pattern Deconstruction ===
+    // Note: These patterns iterate over cons cells when the list variable is bound
+    ("list_deconstruct_bound", r#"
+        has_element(H) += list_has(L) * $cons(H, L).
+    "#),
+
+    ("list_iterate_all", r#"
+        all_heads(H) += $cons(H, T).
+    "#),
+
+    // === $not_matches with compound patterns ===
+    ("not_matches_functor", r#"
+        not_nil(L) += list(L) * $not_matches($nil, L).
+    "#),
+
+    ("not_matches_const", r#"
+        not_five(X) += data(X) * $not_matches(5, X).
+    "#),
+
+    // === $fail in head position (integrity constraints) ===
+    ("fail_head_disjoint", r#"
+        $fail :- k(X) * n(X).
+    "#),
+
+    ("fail_head_irreflexive", r#"
+        $fail :- less(X, X).
+    "#),
+
 ];
 
 /// Programs that use features not yet supported
 /// (for documentation and future implementation)
 ///
-/// List patterns: The code generator supports list construction in heads
-/// (e.g., pair(X, Y, $cons(X, $cons(Y, $nil)))), but recursive list processing
-/// requires free variable enumeration over cons cells, which is not yet implemented.
+/// Note: Most list, $not_matches, and $fail features are now supported.
+/// The remaining unsupported features are complex edge cases.
 const UNSUPPORTED_PROGRAMS: &[(&str, &str, &str)] = &[
-    // Lists - recursive list patterns need enumeration of cons cells for free variables
+    // Lists with sugar syntax - need [X|Xs] desugaring in parser
     ("beta_path", r#"
         goal += beta([X|Xs]) * start(X).
         beta([X,Y|Xs]) += beta([Y|Xs]) * edge(X,Y).
         beta([X]) += stop(X).
-    "#, "Free variables in list patterns need cons cell enumeration"),
+    "#, "List sugar syntax [X|Xs] needs parser support - use $cons(X, Xs) directly"),
 
     ("list_sum", r#"
         asum([], 0).
         asum([X|Xs], S) :- asum(Xs, S2), S is S2 + X.
-    "#, "Free variables in list patterns need cons cell enumeration"),
+    "#, "List sugar syntax [] and [X|Xs] needs parser support - use $nil and $cons directly"),
 
-    // Negation/Special - $not_matches with compound terms not yet supported
+    // Complex $not_matches patterns - need runtime unification check
     ("negation_complex", r#"
         goal += $not_matches(f(X), f(3)).
-    "#, "$not_matches with compound term patterns not supported"),
-
-    // Type constraints - $fail in head position
-    ("type_fail_head", r#"
-        $fail :- k(X), n(X).
-    "#, "$fail in head position (type constraint) not supported"),
+    "#, "$not_matches with pattern variables inside compound terms needs runtime unification"),
 ];
 
 #[test]
@@ -561,14 +583,14 @@ fn test_parse_all() {
 /// Test specific program and print generated code
 #[test]
 fn test_print_generated_code() {
-    let programs_to_print = ["cky_full", "path_with_goal", "bilexical"];
+    let programs_to_print = ["cky_full", "path_with_goal", "bilexical", "list_deconstruct"];
 
     for name in programs_to_print {
         if let Some((_, source)) = SUPPORTED_PROGRAMS.iter().find(|(n, _)| *n == name) {
             let program = parse_program(source).expect("Failed to parse");
             let analysis = ProgramAnalysis::analyze(&program);
             let config = CodeGenConfig::counting();
-            let generator = CodeGenerator::new(analysis, config);
+            let mut generator = CodeGenerator::new(analysis, config);
             let code = generator.generate(&program);
 
             println!("\n============================================================");

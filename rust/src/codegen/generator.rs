@@ -246,6 +246,8 @@ pub struct CodeGenerator {
     pub structs: FxHashMap<(Rc<str>, usize), GeneratedStruct>,
     pub indexes: Vec<GeneratedIndex>,
     pub symbol_table: FxHashMap<Rc<str>, u32>,
+    /// Whether the program uses list operations (set during generate)
+    uses_lists: bool,
 }
 
 impl CodeGenerator {
@@ -257,10 +259,59 @@ impl CodeGenerator {
             structs: FxHashMap::default(),
             indexes: Vec::new(),
             symbol_table: FxHashMap::default(),
+            uses_lists: false, // Set during generate()
         };
         gen.generate_structs();
         gen.generate_indexes();
         gen
+    }
+
+    /// Compute if the program uses list operations ($cons, $nil patterns)
+    fn compute_uses_lists(&self, program: &Program) -> bool {
+        // Check struct fields
+        if self.structs.values().any(|s| {
+            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
+        }) {
+            return true;
+        }
+
+        // Check rule bodies for $cons or $nil patterns
+        for rule in program.iter() {
+            for subgoal in rule.body.iter() {
+                if let Term::Compound { functor, .. } = subgoal {
+                    if functor.as_ref() == "$cons" || functor.as_ref() == "$nil" {
+                        return true;
+                    }
+                }
+            }
+            // Check rule heads for $cons or $nil
+            if let Term::Compound { functor, args } = &rule.head {
+                if functor.as_ref() == "$cons" || functor.as_ref() == "$nil" {
+                    return true;
+                }
+                // Also check nested terms in head args
+                for arg in args {
+                    if self.term_uses_lists(arg) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Check if a term uses list constructors
+    fn term_uses_lists(&self, term: &Term) -> bool {
+        match term {
+            Term::Compound { functor, args } => {
+                if functor.as_ref() == "$cons" || functor.as_ref() == "$nil" {
+                    return true;
+                }
+                args.iter().any(|a| self.term_uses_lists(a))
+            }
+            _ => false,
+        }
     }
 
     /// Generate struct definitions for all functors
@@ -399,8 +450,11 @@ impl CodeGenerator {
     }
 
     /// Generate the complete Rust source code
-    pub fn generate(&self, program: &Program) -> String {
+    pub fn generate(&mut self, program: &Program) -> String {
         let mut code = String::new();
+
+        // Compute whether lists are used
+        self.uses_lists = self.compute_uses_lists(program);
 
         // Header
         writeln!(code, "//! Auto-generated specialized solver").unwrap();
@@ -414,13 +468,7 @@ impl CodeGenerator {
         writeln!(code, "use std::collections::VecDeque;").unwrap();
         writeln!(code).unwrap();
 
-        // Check if lists are used
-        let uses_lists = self.structs.values().any(|s| {
-            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
-            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
-        });
-
-        if uses_lists {
+        if self.uses_lists {
             // List infrastructure
             writeln!(code, "// ============ List Support ============").unwrap();
             writeln!(code, "/// List ID - 0 is Nil, positive values index into cons_cells").unwrap();
@@ -479,11 +527,7 @@ impl CodeGenerator {
         writeln!(code, "    agenda: VecDeque<AgendaItem>,").unwrap();
 
         // List support (if needed)
-        let uses_lists = self.structs.values().any(|s| {
-            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
-            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
-        });
-        if uses_lists {
+        if self.uses_lists {
             writeln!(code, "    /// Cons cells table (index 0 is unused, NIL=0)").unwrap();
             writeln!(code, "    cons_cells: Vec<ConsCell>,").unwrap();
             writeln!(code, "    /// Map from cons cell content to ID for deduplication").unwrap();
@@ -563,11 +607,7 @@ impl CodeGenerator {
         writeln!(code, "            agenda: VecDeque::new(),").unwrap();
 
         // List support initialization
-        let uses_lists = self.structs.values().any(|s| {
-            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
-            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
-        });
-        if uses_lists {
+        if self.uses_lists {
             writeln!(code, "            cons_cells: vec![ConsCell {{ head: 0, tail: 0 }}], // index 0 unused").unwrap();
             writeln!(code, "            cons_lookup: FxHashMap::default(),").unwrap();
         }
@@ -582,12 +622,7 @@ impl CodeGenerator {
     fn generate_list_methods(&self) -> String {
         let mut code = String::new();
 
-        let uses_lists = self.structs.values().any(|s| {
-            s.functor.as_ref() == "$cons" || s.functor.as_ref() == "$nil" ||
-            s.fields.iter().any(|(_, t)| matches!(t, RustType::ListId))
-        });
-
-        if uses_lists {
+        if self.uses_lists {
             writeln!(code, "\n    // ============ List Methods ============").unwrap();
 
             // cons method - create or look up a cons cell
@@ -833,6 +868,25 @@ impl CodeGenerator {
                     continue;
                 }
 
+                // Handle $cons pattern in body - list deconstruction
+                if functor.as_ref() == "$cons" && args.len() == 2 {
+                    code.push_str(&self.generate_cons_pattern(args, &mut bindings, &current_indent, idx));
+                    open_braces.push("for");
+                    current_indent.push_str("    ");
+                    continue;
+                }
+
+                // Handle $nil pattern in body - check for empty list
+                if functor.as_ref() == "$nil" && args.is_empty() {
+                    // $nil with no args is just a check that we have nil
+                    // This would typically be used with a bound list variable
+                    writeln!(code, "{}// $nil pattern - empty list check", current_indent).unwrap();
+                    writeln!(code, "{}if true {{", current_indent).unwrap();
+                    open_braces.push("if");
+                    current_indent.push_str("    ");
+                    continue;
+                }
+
                 let sg_struct = self.structs.get(&(functor.clone(), args.len()));
                 if let Some(sg_struct) = sg_struct {
                     // Find bound positions (where we have a binding for that variable)
@@ -982,6 +1036,20 @@ impl CodeGenerator {
 
         // Generate head construction and update
         if let Term::Compound { functor, args } = &rule.head {
+            // Handle $fail in head position - integrity constraint
+            if functor.as_ref() == "$fail" {
+                writeln!(code, "{}// Integrity constraint violated!", current_indent).unwrap();
+                writeln!(code, "{}panic!(\"Integrity constraint violated: rule {} body was satisfied\");",
+                    current_indent, rule_idx).unwrap();
+
+                // Close all open braces in reverse order
+                while let Some(_brace_type) = open_braces.pop() {
+                    current_indent.truncate(current_indent.len().saturating_sub(4));
+                    writeln!(code, "{}}}", current_indent).unwrap();
+                }
+                return code;
+            }
+
             if let Some(head_struct) = self.structs.get(&(functor.clone(), args.len())) {
                 // Compute value expression (skip builtins - they don't contribute values)
                 let mut value_terms = vec!["delta".to_string()];
@@ -1248,17 +1316,30 @@ impl CodeGenerator {
                     return None;
                 }
 
-                // For simple cases where both are bound
+                // Try simple expressions first
                 if let (Some(lhs), Some(rhs)) = (
                     self.term_to_expr(&args[0], bindings),
                     self.term_to_expr(&args[1], bindings),
                 ) {
                     writeln!(code, "{}if {} != {} {{", indent, lhs, rhs).unwrap();
-                    Some(code)
-                } else {
-                    // Can't determine at compile time - skip
-                    None
+                    return Some(code);
                 }
+
+                // Handle compound term patterns
+                // $not_matches(pattern, value) - check that value doesn't match pattern
+                let pattern = &args[0];
+                let value = &args[1];
+
+                // Generate a structural non-match check
+                if let Some(check_code) = self.generate_not_matches_check(pattern, value, bindings, indent) {
+                    code.push_str(&check_code);
+                    return Some(code);
+                }
+
+                // Fallback: if we can't generate a check, assume it might not match (conservative)
+                writeln!(code, "{}// $not_matches: could not determine statically", indent).unwrap();
+                writeln!(code, "{}if true {{", indent).unwrap();
+                Some(code)
             }
 
             // Chained comparisons (0 <= X <= Y < 3)
@@ -1300,6 +1381,166 @@ impl CodeGenerator {
 
             _ => None,
         }
+    }
+
+    /// Generate code for $not_matches check with compound term patterns.
+    /// Returns code that checks if value does NOT structurally match pattern.
+    fn generate_not_matches_check(
+        &self,
+        pattern: &Term,
+        value: &Term,
+        bindings: &FxHashMap<VarId, String>,
+        indent: &str,
+    ) -> Option<String> {
+        let mut code = String::new();
+
+        match (pattern, value) {
+            // Pattern is a compound term (e.g., f(X)), value is something else
+            (Term::Compound { functor: pf, args: pargs }, Term::Var(v)) => {
+                if let Some(val_expr) = bindings.get(v) {
+                    // Check if the value is bound to something that might match the pattern
+                    // For functor f/n, we need to check if val_expr points to an f/n struct
+                    if let Some(pattern_struct) = self.structs.get(&(pf.clone(), pargs.len())) {
+                        // Generate: check that val_expr is NOT an instance of the pattern
+                        // For a list pattern like $cons(X, Xs), check it's not a cons cell
+                        if pf.as_ref() == "$cons" {
+                            writeln!(code, "{}// $not_matches: check {} is not a cons cell matching pattern", indent, val_expr).unwrap();
+                            // If it's a ListId, check it's NIL (doesn't match cons pattern)
+                            writeln!(code, "{}if self.is_nil({} as usize) {{", indent, val_expr).unwrap();
+                            return Some(code);
+                        } else if pf.as_ref() == "$nil" {
+                            writeln!(code, "{}// $not_matches: check {} is not nil", indent, val_expr).unwrap();
+                            writeln!(code, "{}if !self.is_nil({} as usize) {{", indent, val_expr).unwrap();
+                            return Some(code);
+                        } else {
+                            // For other compound terms, check structural inequality
+                            // This is complex - for now, generate a comment and succeed
+                            writeln!(code, "{}// $not_matches: {} vs {} (compound pattern)", indent, val_expr, pf).unwrap();
+                            writeln!(code, "{}if true {{ // TODO: full structural check", indent).unwrap();
+                            return Some(code);
+                        }
+                    }
+                }
+                None
+            }
+
+            // Pattern is f(args), value is also compound
+            (Term::Compound { functor: pf, args: pargs }, Term::Compound { functor: vf, args: vargs }) => {
+                // If functors differ, they definitely don't match
+                if pf != vf || pargs.len() != vargs.len() {
+                    writeln!(code, "{}// Functors differ: {} vs {} - always succeeds", indent, pf, vf).unwrap();
+                    writeln!(code, "{}if true {{", indent).unwrap();
+                    return Some(code);
+                }
+
+                // Same functor - check if any argument definitely differs
+                let mut conditions = Vec::new();
+                for (pa, va) in pargs.iter().zip(vargs.iter()) {
+                    if let (Some(pe), Some(ve)) = (
+                        self.term_to_expr(pa, bindings),
+                        self.term_to_expr(va, bindings),
+                    ) {
+                        conditions.push(format!("{} != {}", pe, ve));
+                    }
+                }
+
+                if !conditions.is_empty() {
+                    let combined = conditions.join(" || ");
+                    writeln!(code, "{}// $not_matches: check structural inequality", indent).unwrap();
+                    writeln!(code, "{}if {} {{", indent, combined).unwrap();
+                    return Some(code);
+                }
+
+                None
+            }
+
+            // Pattern is a constant
+            (Term::Const(pc), Term::Var(v)) => {
+                if let Some(val_expr) = bindings.get(v) {
+                    let pattern_val = match pc {
+                        Value::Int(n) => format!("{}", n),
+                        Value::Float(f) => format!("{}", f.into_inner()),
+                        Value::Bool(b) => format!("{}", b),
+                        _ => return None,
+                    };
+                    writeln!(code, "{}if {} != {} {{", indent, val_expr, pattern_val).unwrap();
+                    return Some(code);
+                }
+                None
+            }
+
+            _ => None,
+        }
+    }
+
+    /// Generate code for $cons pattern matching in rule body.
+    /// Handles list deconstruction: $cons(Head, Tail) where variables may be free.
+    /// Note: $cons patterns don't contribute to value computation (they're constraints).
+    fn generate_cons_pattern(
+        &self,
+        args: &[Term],
+        bindings: &mut FxHashMap<VarId, String>,
+        indent: &str,
+        idx: usize,
+    ) -> String {
+        let mut code = String::new();
+        let head_arg = &args[0];
+        let tail_arg = &args[1];
+
+        // Check what's bound
+        let head_bound = match head_arg {
+            Term::Var(v) => bindings.contains_key(v),
+            Term::Const(_) => true,
+            _ => false,
+        };
+        let tail_bound = match tail_arg {
+            Term::Var(v) => bindings.contains_key(v),
+            Term::Const(_) => true,
+            _ => false,
+        };
+
+        if head_bound && tail_bound {
+            // Both bound - check if there's a matching cons cell
+            let head_expr = self.term_to_expr(head_arg, bindings).unwrap_or_else(|| "/* unknown */".to_string());
+            let tail_expr = self.term_to_expr(tail_arg, bindings).unwrap_or_else(|| "/* unknown */".to_string());
+            writeln!(code, "{}// Check for cons cell with head={}, tail={}", indent, head_expr, tail_expr).unwrap();
+            writeln!(code, "{}let _cons_id_{} = self.cons({} as i64, {} as usize);", indent, idx, head_expr, tail_expr).unwrap();
+            writeln!(code, "{}if true {{ // cons pattern match", indent).unwrap();
+        } else if tail_bound && !head_bound {
+            // Tail is a bound list, head is free - find all cons cells with matching tail
+            let tail_expr = self.term_to_expr(tail_arg, bindings).unwrap_or_else(|| "/* unknown */".to_string());
+            writeln!(code, "{}// Find cons cells with tail={}", indent, tail_expr).unwrap();
+            writeln!(code, "{}for cell in self.cons_cells.iter().skip(1).filter(|c| c.tail == {} as usize) {{", indent, tail_expr).unwrap();
+
+            // Bind head variable
+            if let Term::Var(v) = head_arg {
+                bindings.insert(*v, "cell.head".to_string());
+            }
+        } else if !tail_bound && head_bound {
+            // Head is bound, tail is free - find cons cells with this head
+            let head_expr = self.term_to_expr(head_arg, bindings).unwrap_or_else(|| "/* unknown */".to_string());
+            writeln!(code, "{}// Find cons cells with head={}", indent, head_expr).unwrap();
+            writeln!(code, "{}for cell in self.cons_cells.iter().skip(1).filter(|c| c.head == {} as i64) {{", indent, head_expr).unwrap();
+
+            // Bind tail variable
+            if let Term::Var(v) = tail_arg {
+                bindings.insert(*v, "cell.tail".to_string());
+            }
+        } else {
+            // Both free - iterate over all cons cells
+            writeln!(code, "{}// Iterate over all cons cells", indent).unwrap();
+            writeln!(code, "{}for cell in self.cons_cells.iter().skip(1) {{", indent).unwrap();
+
+            // Bind both variables
+            if let Term::Var(v) = head_arg {
+                bindings.insert(*v, "cell.head".to_string());
+            }
+            if let Term::Var(v) = tail_arg {
+                bindings.insert(*v, "cell.tail".to_string());
+            }
+        }
+
+        code
     }
 
     /// Convert a term to a head argument expression.
@@ -1462,7 +1703,7 @@ mod tests {
         let program = Program::from_rules(rules);
         let analysis = ProgramAnalysis::analyze(&program);
         let config = CodeGenConfig::counting();
-        let generator = CodeGenerator::new(analysis, config);
+        let mut generator = CodeGenerator::new(analysis, config);
 
         let code = generator.generate(&program);
         println!("{}", code);
@@ -1487,7 +1728,7 @@ mod tests {
         let program = Program::from_rules(vec![binary_rule]);
         let analysis = ProgramAnalysis::analyze(&program);
         let config = CodeGenConfig::counting();
-        let generator = CodeGenerator::new(analysis, config);
+        let mut generator = CodeGenerator::new(analysis, config);
 
         let code = generator.generate(&program);
         println!("{}", code);

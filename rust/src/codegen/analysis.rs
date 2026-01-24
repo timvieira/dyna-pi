@@ -119,8 +119,8 @@ impl ProgramAnalysis {
         for (rule_idx, rule) in program.iter().enumerate() {
             for (subgoal_idx, subgoal) in rule.body.iter().enumerate() {
                 if let Some(fa) = subgoal.functor_arity() {
-                    // Skip builtins for driver analysis
-                    if Self::is_builtin(&fa.0) {
+                    // Skip builtins and list constructors for driver analysis
+                    if Self::is_builtin(&fa.0) || Self::is_list_constructor(&fa.0) {
                         continue;
                     }
 
@@ -149,16 +149,22 @@ impl ProgramAnalysis {
         analysis
     }
 
-    /// Check if a functor is a builtin constraint (not a data constructor)
-    /// $cons and $nil are data constructors, not builtins
+    /// Check if a functor is a builtin constraint (not a relation)
+    /// Builtins don't get their own storage - they're evaluated inline
     pub fn is_builtin(functor: &str) -> bool {
-        functor.starts_with('$') && functor != "$cons" && functor != "$nil"
+        functor.starts_with('$')
+    }
+
+    /// Check if a functor is a list constructor (special handling)
+    /// $cons and $nil are list infrastructure, not regular relations
+    pub fn is_list_constructor(functor: &str) -> bool {
+        functor == "$cons" || functor == "$nil"
     }
 
     fn analyze_term(&mut self, term: &Term, var_types: &FxHashMap<VarId, ArgType>) {
         if let Term::Compound { functor, args } = term {
-            // Skip builtin predicates - they don't need storage
-            if Self::is_builtin(functor) {
+            // Skip builtin predicates and list constructors - they don't need storage
+            if Self::is_builtin(functor) || Self::is_list_constructor(functor) {
                 return;
             }
 

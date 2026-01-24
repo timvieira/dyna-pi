@@ -59,7 +59,7 @@ fn test_codegen_transitive_closure() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== Transitive Closure Generated Code ===");
@@ -104,7 +104,7 @@ fn test_codegen_cky_parsing() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== CKY Parsing Generated Code ===");
@@ -144,7 +144,7 @@ fn test_codegen_facts_only() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== Facts Only Generated Code ===");
@@ -173,7 +173,7 @@ fn test_codegen_fibonacci() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== Fibonacci-like Generated Code ===");
@@ -203,7 +203,7 @@ fn test_codegen_boolean_semiring() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::boolean();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== Boolean Semiring Generated Code ===");
@@ -242,7 +242,7 @@ fn test_codegen_tropical_semiring() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::tropical();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== Tropical Semiring Generated Code ===");
@@ -279,7 +279,7 @@ fn test_codegen_head_construction() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== Head Construction Generated Code ===");
@@ -312,7 +312,7 @@ fn test_codegen_grammar_simplified() {
 
     let analysis = ProgramAnalysis::analyze(&program);
     let config = CodeGenConfig::counting();
-    let generator = CodeGenerator::new(analysis, config);
+    let mut generator = CodeGenerator::new(analysis, config);
     let code = generator.generate(&program);
 
     println!("=== Grammar Simplified Generated Code ===");
@@ -377,7 +377,7 @@ fn test_codegen_all_programs() {
 
         let analysis = ProgramAnalysis::analyze(&program);
         let config = CodeGenConfig::counting();
-        let generator = CodeGenerator::new(analysis, config);
+        let mut generator = CodeGenerator::new(analysis, config);
         let code = generator.generate(&program);
 
         let open = code.matches('{').count();
