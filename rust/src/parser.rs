@@ -65,10 +65,22 @@ enum Token {
     Star,        // *
     Plus,        // +
     Minus,       // -
+    Slash,       // /
     PlusEq,      // +=
     ColonDash,   // :-
     Underscore,  // _ (anonymous var)
     Pipe,        // |
+
+    // Comparison operators
+    Lt,          // <
+    Gt,          // >
+    Le,          // <=
+    Ge,          // >=
+    Eq,          // = or ==
+    Ne,          // != or \=
+
+    // Keywords
+    Is,          // is (arithmetic)
 
     Eof,
 }
@@ -168,14 +180,15 @@ impl<'a> Lexer<'a> {
         // Check for decimal point
         if self.peek() == Some('.') {
             // Look ahead to see if it's a decimal or end of rule
-            let pos = self.position;
+            let _pos = self.position;
             self.advance();
-            if let Some(c) = self.peek() {
-                if c.is_ascii_digit() {
+            match self.peek() {
+                Some(c) if c.is_ascii_digit() => {
                     s.push('.');
                     s.push_str(&self.read_while(|c| c.is_ascii_digit()));
-                } else {
-                    // It's the end-of-rule dot, not part of the number
+                }
+                _ => {
+                    // It's the end-of-rule dot (or EOF), not part of the number
                     // We already consumed the dot, so save it as a pending token
                     let n = s.parse::<i64>()
                         .map_err(|_| ParseError::InvalidNumber(s.clone()))?;
@@ -232,7 +245,51 @@ impl<'a> Lexer<'a> {
                     ',' => { self.advance(); Ok(Token::Comma) }
                     '.' => { self.advance(); Ok(Token::Dot) }
                     '*' => { self.advance(); Ok(Token::Star) }
+                    '/' => { self.advance(); Ok(Token::Slash) }
                     '|' => { self.advance(); Ok(Token::Pipe) }
+                    '<' => {
+                        self.advance();
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Ok(Token::Le)
+                        } else {
+                            Ok(Token::Lt)
+                        }
+                    }
+                    '>' => {
+                        self.advance();
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Ok(Token::Ge)
+                        } else {
+                            Ok(Token::Gt)
+                        }
+                    }
+                    '=' => {
+                        self.advance();
+                        if self.peek() == Some('=') {
+                            self.advance();
+                        }
+                        Ok(Token::Eq)
+                    }
+                    '!' => {
+                        self.advance();
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Ok(Token::Ne)
+                        } else {
+                            Err(ParseError::UnexpectedChar('!'))
+                        }
+                    }
+                    '\\' => {
+                        self.advance();
+                        if self.peek() == Some('=') {
+                            self.advance();
+                            Ok(Token::Ne)
+                        } else {
+                            Err(ParseError::UnexpectedChar('\\'))
+                        }
+                    }
                     '_' => {
                         self.advance();
                         // Check if it's just _ or _Name
@@ -294,6 +351,12 @@ impl<'a> Lexer<'a> {
                             "true" => Ok(Token::Functor("true".to_string())),
                             "false" => Ok(Token::Functor("false".to_string())),
                             "inf" => Ok(Token::Float(f64::INFINITY)),
+                            "is" => Ok(Token::Is),
+                            "mod" => Ok(Token::Functor("$mod".to_string())),
+                            "div" => Ok(Token::Functor("$div".to_string())),
+                            "abs" => Ok(Token::Functor("$abs".to_string())),
+                            "min" => Ok(Token::Functor("$min".to_string())),
+                            "max" => Ok(Token::Functor("$max".to_string())),
                             _ => Ok(Token::Functor(name)),
                         }
                     }
@@ -377,8 +440,8 @@ impl<'a> Parser<'a> {
         self.anon_counter = 0;
     }
 
-    /// Parse a term.
-    fn parse_term(&mut self) -> ParseResult<Term> {
+    /// Parse a simple term (without checking for 'is' or comparison operators).
+    fn parse_simple_term(&mut self) -> ParseResult<Term> {
         match &self.current {
             Token::Var(name) => {
                 let name = name.clone();
@@ -482,14 +545,182 @@ impl<'a> Parser<'a> {
                 Ok(list)
             }
             Token::LParen => {
-                // Parenthesized expression
+                // Parenthesized expression - could be just (term), comparison (A < B), or is (Y is X + 1)
                 self.advance()?;
-                let term = self.parse_term()?;
+                let term = self.parse_simple_term()?;
+
+                // Check for comparison operators and 'is'
+                let result = match &self.current {
+                    Token::Lt => {
+                        self.advance()?;
+                        let rhs = self.parse_simple_term()?;
+                        Term::compound("$lt", vec![term, rhs])
+                    }
+                    Token::Le => {
+                        self.advance()?;
+                        let rhs = self.parse_simple_term()?;
+                        Term::compound("$le", vec![term, rhs])
+                    }
+                    Token::Gt => {
+                        self.advance()?;
+                        let rhs = self.parse_simple_term()?;
+                        Term::compound("$gt", vec![term, rhs])
+                    }
+                    Token::Ge => {
+                        self.advance()?;
+                        let rhs = self.parse_simple_term()?;
+                        Term::compound("$ge", vec![term, rhs])
+                    }
+                    Token::Eq => {
+                        self.advance()?;
+                        let rhs = self.parse_simple_term()?;
+                        Term::compound("$eq", vec![term, rhs])
+                    }
+                    Token::Ne => {
+                        self.advance()?;
+                        let rhs = self.parse_simple_term()?;
+                        Term::compound("$ne", vec![term, rhs])
+                    }
+                    Token::Is => {
+                        self.advance()?;
+                        let rhs = self.parse_arith_expr()?;
+                        Term::compound("$is", vec![term, rhs])
+                    }
+                    _ => term,
+                };
+
                 self.expect(Token::RParen)?;
-                Ok(term)
+                Ok(result)
             }
             _ => Err(ParseError::Expected {
                 expected: "term".to_string(),
+                found: format!("{:?}", self.current),
+            }),
+        }
+    }
+
+    /// Parse a term, including 'is' expressions.
+    fn parse_term(&mut self) -> ParseResult<Term> {
+        let term = self.parse_simple_term()?;
+
+        // Check for 'is' (arithmetic assignment)
+        if self.current == Token::Is {
+            self.advance()?;
+            let expr = self.parse_arith_expr()?;
+            return Ok(Term::compound("$is", vec![term, expr]));
+        }
+
+        Ok(term)
+    }
+
+    /// Parse an arithmetic expression for the RHS of 'is'.
+    fn parse_arith_expr(&mut self) -> ParseResult<Term> {
+        self.parse_arith_additive()
+    }
+
+    /// Parse additive expressions (+ -)
+    fn parse_arith_additive(&mut self) -> ParseResult<Term> {
+        let mut left = self.parse_arith_multiplicative()?;
+
+        loop {
+            match &self.current {
+                Token::Plus => {
+                    self.advance()?;
+                    let right = self.parse_arith_multiplicative()?;
+                    left = Term::compound("$add", vec![left, right]);
+                }
+                Token::Minus => {
+                    self.advance()?;
+                    let right = self.parse_arith_multiplicative()?;
+                    left = Term::compound("$sub", vec![left, right]);
+                }
+                _ => break,
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse multiplicative expressions (* /)
+    fn parse_arith_multiplicative(&mut self) -> ParseResult<Term> {
+        let mut left = self.parse_arith_primary()?;
+
+        loop {
+            match &self.current {
+                Token::Star => {
+                    self.advance()?;
+                    let right = self.parse_arith_primary()?;
+                    left = Term::compound("$mul", vec![left, right]);
+                }
+                Token::Slash => {
+                    self.advance()?;
+                    let right = self.parse_arith_primary()?;
+                    left = Term::compound("$div", vec![left, right]);
+                }
+                _ => break,
+            }
+        }
+
+        Ok(left)
+    }
+
+    /// Parse primary arithmetic terms (numbers, variables, parenthesized expressions, function calls)
+    fn parse_arith_primary(&mut self) -> ParseResult<Term> {
+        match &self.current {
+            Token::Int(n) => {
+                let n = *n;
+                self.advance()?;
+                Ok(Term::Const(Value::Int(n)))
+            }
+            Token::Float(f) => {
+                let f = *f;
+                self.advance()?;
+                Ok(Term::Const(Value::Float(ordered_float::OrderedFloat(f))))
+            }
+            Token::Var(name) => {
+                let name = name.clone();
+                self.advance()?;
+                let id = self.get_or_create_var(&name);
+                Ok(Term::Var(id))
+            }
+            Token::Functor(name) => {
+                let name = name.clone();
+                self.advance()?;
+
+                // Function call like abs(X), min(A, B), max(A, B)
+                if self.current == Token::LParen {
+                    self.advance()?;
+                    let mut args = Vec::new();
+
+                    if self.current != Token::RParen {
+                        args.push(self.parse_arith_expr()?);
+                        while self.current == Token::Comma {
+                            self.advance()?;
+                            args.push(self.parse_arith_expr()?);
+                        }
+                    }
+
+                    self.expect(Token::RParen)?;
+                    Ok(Term::compound(name.clone(), args))
+                } else {
+                    // Bare functor (like a constant)
+                    Ok(Term::atom(name))
+                }
+            }
+            Token::LParen => {
+                self.advance()?;
+                let expr = self.parse_arith_expr()?;
+                self.expect(Token::RParen)?;
+                Ok(expr)
+            }
+            Token::Minus => {
+                // Unary minus
+                self.advance()?;
+                let operand = self.parse_arith_primary()?;
+                Ok(Term::compound("$neg", vec![operand]))
+            }
+            _ => Err(ParseError::Expected {
+                expected: "arithmetic expression".to_string(),
                 found: format!("{:?}", self.current),
             }),
         }
@@ -744,5 +975,139 @@ mod tests {
             rewrite(s, np, vp).
         "#).unwrap();
         assert_eq!(program.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_comparison_lt() {
+        let rule = parse_rule("goal(A, B) += (A < B).").unwrap();
+        assert_eq!(rule.body.len(), 1);
+        let constraint = &rule.body[0];
+        assert_eq!(constraint.functor(), Some("$lt"));
+        assert_eq!(constraint.arity(), 2);
+    }
+
+    #[test]
+    fn test_parse_comparison_le() {
+        let rule = parse_rule("goal(A, B) += (A <= B).").unwrap();
+        let constraint = &rule.body[0];
+        assert_eq!(constraint.functor(), Some("$le"));
+    }
+
+    #[test]
+    fn test_parse_comparison_gt() {
+        let rule = parse_rule("goal(A, B) += (A > B).").unwrap();
+        let constraint = &rule.body[0];
+        assert_eq!(constraint.functor(), Some("$gt"));
+    }
+
+    #[test]
+    fn test_parse_comparison_ge() {
+        let rule = parse_rule("goal(A, B) += (A >= B).").unwrap();
+        let constraint = &rule.body[0];
+        assert_eq!(constraint.functor(), Some("$ge"));
+    }
+
+    #[test]
+    fn test_parse_comparison_eq() {
+        let rule = parse_rule("goal(A, B) += (A == B).").unwrap();
+        let constraint = &rule.body[0];
+        assert_eq!(constraint.functor(), Some("$eq"));
+    }
+
+    #[test]
+    fn test_parse_comparison_ne() {
+        let rule = parse_rule("goal(A, B) += (A != B).").unwrap();
+        let constraint = &rule.body[0];
+        assert_eq!(constraint.functor(), Some("$ne"));
+    }
+
+    #[test]
+    fn test_parse_is_simple() {
+        let rule = parse_rule("f(X, Y) += Y is X + 1.").unwrap();
+        assert_eq!(rule.body.len(), 1);
+        let is_term = &rule.body[0];
+        assert_eq!(is_term.functor(), Some("$is"));
+        assert_eq!(is_term.arity(), 2);
+    }
+
+    #[test]
+    fn test_parse_is_complex() {
+        let rule = parse_rule("f(X, Y, Z) += Z is X * Y + 1.").unwrap();
+        let is_term = &rule.body[0];
+        assert_eq!(is_term.functor(), Some("$is"));
+        // RHS should be $add($mul(X, Y), 1)
+        if let Term::Compound { args, .. } = is_term {
+            let rhs = &args[1];
+            assert_eq!(rhs.functor(), Some("$add"));
+        }
+    }
+
+    #[test]
+    fn test_parse_is_with_function() {
+        let rule = parse_rule("f(X, Y) += Y is abs(X).").unwrap();
+        let is_term = &rule.body[0];
+        if let Term::Compound { args, .. } = is_term {
+            let rhs = &args[1];
+            // 'abs' is converted to '$abs' by the lexer
+            assert_eq!(rhs.functor(), Some("$abs"));
+        }
+    }
+
+    #[test]
+    fn test_parse_is_with_min_max() {
+        let rule = parse_rule("f(X, Y, Z) += Z is min(X, Y).").unwrap();
+        let is_term = &rule.body[0];
+        if let Term::Compound { args, .. } = is_term {
+            let rhs = &args[1];
+            // 'min' is converted to '$min' by the lexer
+            assert_eq!(rhs.functor(), Some("$min"));
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_comparisons() {
+        let rule = parse_rule("goal(A, B, C) += (A < B), (B < C).").unwrap();
+        assert_eq!(rule.body.len(), 2);
+        assert_eq!(rule.body[0].functor(), Some("$lt"));
+        assert_eq!(rule.body[1].functor(), Some("$lt"));
+    }
+
+    #[test]
+    fn test_parse_comparison_with_other_terms() {
+        let program = parse_program(r#"
+            goal(A, B, C) += (A < B), (B < C).
+            goal(A, B, C, D) += (A < B), (B < C), (C < D).
+        "#).unwrap();
+        assert_eq!(program.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_arithmetic_expression() {
+        let rule = parse_rule("f(X, Y) += Y is 2 + 4.").unwrap();
+        let is_term = &rule.body[0];
+        if let Term::Compound { args, .. } = is_term {
+            let rhs = &args[1];
+            assert_eq!(rhs.functor(), Some("$add"));
+        }
+    }
+
+    #[test]
+    fn test_parse_division() {
+        let rule = parse_rule("f(X, Y) += Y is X / 2.").unwrap();
+        let is_term = &rule.body[0];
+        if let Term::Compound { args, .. } = is_term {
+            let rhs = &args[1];
+            assert_eq!(rhs.functor(), Some("$div"));
+        }
+    }
+
+    #[test]
+    fn test_parse_unary_minus() {
+        let rule = parse_rule("f(X, Y) += Y is -X.").unwrap();
+        let is_term = &rule.body[0];
+        if let Term::Compound { args, .. } = is_term {
+            let rhs = &args[1];
+            assert_eq!(rhs.functor(), Some("$neg"));
+        }
     }
 }

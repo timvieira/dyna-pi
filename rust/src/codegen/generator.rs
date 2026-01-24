@@ -675,6 +675,24 @@ impl CodeGenerator {
             }
 
             if let Term::Compound { functor, args } = subgoal {
+                // Check for builtin predicates
+                if let Some(builtin_code) = self.generate_builtin(functor, args, &bindings, &current_indent, idx) {
+                    code.push_str(&builtin_code);
+                    open_braces.push("if");
+                    current_indent.push_str("    ");
+
+                    // Collect any new bindings from the builtin (for $is)
+                    if functor.as_ref() == "$is" {
+                        if let Some(Term::Var(v)) = args.first() {
+                            if !bindings.contains_key(v) {
+                                // The LHS of 'is' is being bound
+                                bindings.insert(*v, format!("_is_result_{}", idx));
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 let sg_struct = self.structs.get(&(functor.clone(), args.len()));
                 if let Some(sg_struct) = sg_struct {
                     // Find bound positions (where we have a binding for that variable)
@@ -825,10 +843,16 @@ impl CodeGenerator {
         // Generate head construction and update
         if let Term::Compound { functor, args } = &rule.head {
             if let Some(head_struct) = self.structs.get(&(functor.clone(), args.len())) {
-                // Compute value expression
+                // Compute value expression (skip builtins - they don't contribute values)
                 let mut value_terms = vec!["delta".to_string()];
-                for (idx, _) in rule.body.iter().enumerate() {
+                for (idx, subgoal) in rule.body.iter().enumerate() {
                     if idx != trigger_idx {
+                        // Skip builtins - they're constraints, not value contributors
+                        if let Term::Compound { functor: sg_functor, .. } = subgoal {
+                            if sg_functor.starts_with('$') {
+                                continue;
+                            }
+                        }
                         value_terms.push(format!("val{}", idx));
                     }
                 }
@@ -883,6 +907,146 @@ impl CodeGenerator {
         }
 
         code
+    }
+
+    /// Generate code for builtin predicates.
+    /// Returns Some(code) if this is a builtin, None otherwise.
+    fn generate_builtin(
+        &self,
+        functor: &str,
+        args: &[Term],
+        bindings: &FxHashMap<VarId, String>,
+        indent: &str,
+        subgoal_idx: usize,
+    ) -> Option<String> {
+        let mut code = String::new();
+
+        match functor {
+            // Comparison builtins
+            "$lt" | "$le" | "$gt" | "$ge" | "$eq" | "$ne" => {
+                if args.len() != 2 {
+                    return None;
+                }
+
+                let op = match functor {
+                    "$lt" => "<",
+                    "$le" => "<=",
+                    "$gt" => ">",
+                    "$ge" => ">=",
+                    "$eq" => "==",
+                    "$ne" => "!=",
+                    _ => return None,
+                };
+
+                let lhs = self.term_to_expr(&args[0], bindings)?;
+                let rhs = self.term_to_expr(&args[1], bindings)?;
+
+                writeln!(code, "{}if {} {} {} {{", indent, lhs, op, rhs).unwrap();
+                Some(code)
+            }
+
+            // Arithmetic assignment
+            "$is" => {
+                if args.len() != 2 {
+                    return None;
+                }
+
+                let lhs = &args[0];
+                let rhs_expr = self.arith_to_expr(&args[1], bindings)?;
+
+                match lhs {
+                    Term::Var(v) => {
+                        if let Some(binding) = bindings.get(v) {
+                            // Variable is already bound - this is a check
+                            writeln!(code, "{}if {} == ({}) {{", indent, binding, rhs_expr).unwrap();
+                        } else {
+                            // Variable is being bound - compute and assign
+                            writeln!(code, "{}let _is_result_{} = {};", indent, subgoal_idx, rhs_expr).unwrap();
+                            writeln!(code, "{}if true {{", indent).unwrap();
+                        }
+                    }
+                    _ => {
+                        // LHS is a constant - check equality
+                        let lhs_expr = self.term_to_expr(lhs, bindings)?;
+                        writeln!(code, "{}if {} == ({}) {{", indent, lhs_expr, rhs_expr).unwrap();
+                    }
+                }
+
+                Some(code)
+            }
+
+            _ => None,
+        }
+    }
+
+    /// Convert a term to a Rust expression string.
+    fn term_to_expr(&self, term: &Term, bindings: &FxHashMap<VarId, String>) -> Option<String> {
+        match term {
+            Term::Var(v) => bindings.get(v).cloned(),
+            Term::Const(Value::Int(n)) => Some(format!("{}", n)),
+            Term::Const(Value::Float(f)) => Some(format!("{}", f.into_inner())),
+            Term::Const(Value::Bool(b)) => Some(format!("{}", b)),
+            _ => None,
+        }
+    }
+
+    /// Convert an arithmetic term to a Rust expression string.
+    fn arith_to_expr(&self, term: &Term, bindings: &FxHashMap<VarId, String>) -> Option<String> {
+        match term {
+            Term::Var(v) => bindings.get(v).map(|s| format!("({} as f64)", s)),
+            Term::Const(Value::Int(n)) => Some(format!("{}.0", n)),
+            Term::Const(Value::Float(f)) => Some(format!("{}", f.into_inner())),
+
+            Term::Compound { functor, args } => {
+                match functor.as_ref() {
+                    "$add" if args.len() == 2 => {
+                        let l = self.arith_to_expr(&args[0], bindings)?;
+                        let r = self.arith_to_expr(&args[1], bindings)?;
+                        Some(format!("({} + {})", l, r))
+                    }
+                    "$sub" if args.len() == 2 => {
+                        let l = self.arith_to_expr(&args[0], bindings)?;
+                        let r = self.arith_to_expr(&args[1], bindings)?;
+                        Some(format!("({} - {})", l, r))
+                    }
+                    "$mul" if args.len() == 2 => {
+                        let l = self.arith_to_expr(&args[0], bindings)?;
+                        let r = self.arith_to_expr(&args[1], bindings)?;
+                        Some(format!("({} * {})", l, r))
+                    }
+                    "$div" if args.len() == 2 => {
+                        let l = self.arith_to_expr(&args[0], bindings)?;
+                        let r = self.arith_to_expr(&args[1], bindings)?;
+                        Some(format!("({} / {})", l, r))
+                    }
+                    "$neg" if args.len() == 1 => {
+                        let a = self.arith_to_expr(&args[0], bindings)?;
+                        Some(format!("(-{})", a))
+                    }
+                    "$abs" if args.len() == 1 => {
+                        let a = self.arith_to_expr(&args[0], bindings)?;
+                        Some(format!("({}).abs()", a))
+                    }
+                    "$min" if args.len() == 2 => {
+                        let l = self.arith_to_expr(&args[0], bindings)?;
+                        let r = self.arith_to_expr(&args[1], bindings)?;
+                        Some(format!("({}).min({})", l, r))
+                    }
+                    "$max" if args.len() == 2 => {
+                        let l = self.arith_to_expr(&args[0], bindings)?;
+                        let r = self.arith_to_expr(&args[1], bindings)?;
+                        Some(format!("({}).max({})", l, r))
+                    }
+                    "$mod" if args.len() == 2 => {
+                        let l = self.arith_to_expr(&args[0], bindings)?;
+                        let r = self.arith_to_expr(&args[1], bindings)?;
+                        Some(format!("(({} as i64) % ({} as i64)) as f64", l, r))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
     }
 
     /// Generate query methods

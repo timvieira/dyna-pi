@@ -354,6 +354,52 @@ const SUPPORTED_PROGRAMS: &[(&str, &str)] = &[
     ("lattice_join", r#"
         lub(X, Y, Z) += leq(X, Z) * leq(Y, Z).
     "#),
+
+    // === Comparison Builtins ===
+    ("comparison_lt", r#"
+        goal(X, Y) += data(X) * data(Y) * (X < Y).
+    "#),
+
+    ("comparison_le", r#"
+        goal(X, Y) += data(X) * data(Y) * (X <= Y).
+    "#),
+
+    ("comparison_gt", r#"
+        goal(X, Y) += data(X) * data(Y) * (X > Y).
+    "#),
+
+    ("comparison_ge", r#"
+        goal(X, Y) += data(X) * data(Y) * (X >= Y).
+    "#),
+
+    ("comparison_eq", r#"
+        goal(X, Y) += data(X) * data(Y) * (X == Y).
+    "#),
+
+    ("comparison_ne", r#"
+        goal(X, Y) += data(X) * data(Y) * (X != Y).
+    "#),
+
+    // === Arithmetic Builtins ===
+    ("arithmetic_simple", r#"
+        f(X, Y) += data(X) * (Y is X + 1).
+    "#),
+
+    ("arithmetic_complex", r#"
+        f(X, Y) += data(X) * (Y is X * 2 + 1).
+    "#),
+
+    ("arithmetic_sub", r#"
+        diff(X, Y, D) += data(X) * data(Y) * (D is X - Y).
+    "#),
+
+    ("arithmetic_div", r#"
+        ratio(X, Y, R) += data(X) * data(Y) * (R is X / Y).
+    "#),
+
+    ("arithmetic_combined", r#"
+        range(X, Y) += data(X) * (Y is X + 1) * (X >= 0) * (Y < 10).
+    "#),
 ];
 
 /// Programs that use features not yet supported
@@ -369,20 +415,11 @@ const UNSUPPORTED_PROGRAMS: &[(&str, &str, &str)] = &[
     ("list_sum", r#"
         asum([], 0).
         asum([X|Xs], S) :- asum(Xs, S2), S is S2 + X.
-    "#, "Lists and 'is' builtin not supported"),
-
-    // Builtins
-    ("arithmetic", r#"
-        f(X, Y) += X is 2 + 4, Y is X + 1.
-    "#, "'is' builtin not supported"),
-
-    ("comparison", r#"
-        goal(A, B, C) += (A < B), (B < C).
-    "#, "Comparison builtins not supported"),
+    "#, "List patterns not supported"),
 
     ("chained_compare", r#"
         goal += 0 <= X <= Y < 3.
-    "#, "Chained comparison not supported"),
+    "#, "Chained comparison syntax not supported"),
 
     // Unification
     ("unification", r#"
@@ -479,6 +516,24 @@ fn test_parse_all() {
     }
 
     assert_eq!(parse_failures, 0, "{} programs failed to parse", parse_failures);
+}
+
+/// Test and debug comparison builtins
+#[test]
+fn test_debug_comparison() {
+    let source = r#"
+        goal(X, Y) += data(X) * data(Y) * (X < Y).
+    "#;
+
+    let program = parse_program(source).expect("Failed to parse");
+    println!("Parsed: {:?}\n", program);
+
+    let analysis = ProgramAnalysis::analyze(&program);
+    let config = CodeGenConfig::counting();
+    let generator = CodeGenerator::new(analysis, config);
+    let code = generator.generate(&program);
+
+    println!("Generated code:\n{}", code);
 }
 
 /// Test specific program and print generated code

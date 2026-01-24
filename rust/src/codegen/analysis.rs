@@ -119,6 +119,11 @@ impl ProgramAnalysis {
         for (rule_idx, rule) in program.iter().enumerate() {
             for (subgoal_idx, subgoal) in rule.body.iter().enumerate() {
                 if let Some(fa) = subgoal.functor_arity() {
+                    // Skip builtins for driver analysis
+                    if Self::is_builtin(&fa.0) {
+                        continue;
+                    }
+
                     // Record driver
                     analysis
                         .drivers
@@ -144,8 +149,18 @@ impl ProgramAnalysis {
         analysis
     }
 
+    /// Check if a functor is a builtin (starts with $)
+    pub fn is_builtin(functor: &str) -> bool {
+        functor.starts_with('$')
+    }
+
     fn analyze_term(&mut self, term: &Term, var_types: &FxHashMap<VarId, ArgType>) {
         if let Term::Compound { functor, args } = term {
+            // Skip builtin predicates - they don't need storage
+            if Self::is_builtin(functor) {
+                return;
+            }
+
             let fa = (functor.clone(), args.len());
 
             let sig = self.functors.entry(fa).or_insert_with(|| FunctorSig {
