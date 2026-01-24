@@ -278,40 +278,69 @@ impl CodeGenerator {
     }
 
     /// Generate indexes for all query modes
+    /// Analyzes rules to determine which indexes are actually needed for joins
     fn generate_indexes(&mut self) {
-        for ((functor, arity), sig) in &self.analysis.functors {
-            let struct_name = self.functor_to_struct_name(functor);
+        let mut needed_indexes: FxHashSet<(Rc<str>, usize, Vec<usize>)> = FxHashSet::default();
 
-            for mode in &sig.modes {
-                if mode.is_empty() {
-                    continue; // No index needed for mode []
-                }
-
-                let index_name = format!("{}_by_{}",
-                    functor.to_lowercase(),
-                    mode.iter().map(|i| format!("arg{}", i)).collect::<Vec<_>>().join("_")
-                );
-
-                let key_fields: Vec<String> = mode.iter()
-                    .map(|&i| format!("arg{}", i))
-                    .collect();
-
-                let key_types: Vec<RustType> = mode.iter()
-                    .map(|&i| RustType::from_arg_type(&sig.arg_types[i], &self.config))
-                    .collect();
-
-                // Check if we can use array indexing
-                let (use_array, bounds) = self.check_array_bounds(&sig.arg_types, mode);
-
-                self.indexes.push(GeneratedIndex {
-                    name: index_name,
-                    item_struct: struct_name.clone(),
-                    key_fields,
-                    key_types,
-                    use_array,
-                    array_bounds: bounds,
-                });
+        // Analyze each rule to find needed indexes
+        for ((functor, arity), drivers) in &self.analysis.drivers {
+            for &(rule_idx, trigger_idx) in drivers {
+                // Get the rule from program (we'll need to pass program here)
+                // For now, add indexes based on functor modes
             }
+        }
+
+        // Add indexes from analysis modes
+        for ((functor, arity), sig) in &self.analysis.functors {
+            for mode in &sig.modes {
+                if !mode.is_empty() {
+                    needed_indexes.insert((functor.clone(), *arity, mode.clone()));
+                }
+            }
+
+            // Also add single-position indexes for each position (needed for various joins)
+            for i in 0..*arity {
+                needed_indexes.insert((functor.clone(), *arity, vec![i]));
+            }
+        }
+
+        // Create index definitions
+        for (functor, arity, positions) in needed_indexes {
+            let struct_name = self.functor_to_struct_name(&functor);
+            let sig = match self.analysis.functors.get(&(functor.clone(), arity)) {
+                Some(s) => s,
+                None => continue,
+            };
+
+            let index_name = format!("{}_by_{}",
+                functor.to_lowercase(),
+                positions.iter().map(|i| format!("arg{}", i)).collect::<Vec<_>>().join("_")
+            );
+
+            // Skip if we already have this index
+            if self.indexes.iter().any(|idx| idx.name == index_name) {
+                continue;
+            }
+
+            let key_fields: Vec<String> = positions.iter()
+                .map(|&i| format!("arg{}", i))
+                .collect();
+
+            let key_types: Vec<RustType> = positions.iter()
+                .map(|&i| RustType::from_arg_type(&sig.arg_types[i], &self.config))
+                .collect();
+
+            // Check if we can use array indexing
+            let (use_array, bounds) = self.check_array_bounds(&sig.arg_types, &positions);
+
+            self.indexes.push(GeneratedIndex {
+                name: index_name,
+                item_struct: struct_name.clone(),
+                key_fields,
+                key_types,
+                use_array,
+                array_bounds: bounds,
+            });
         }
     }
 
@@ -648,7 +677,7 @@ impl CodeGenerator {
             if let Term::Compound { functor, args } = subgoal {
                 let sg_struct = self.structs.get(&(functor.clone(), args.len()));
                 if let Some(sg_struct) = sg_struct {
-                    // Find bound positions (where we have a binding)
+                    // Find bound positions (where we have a binding for that variable)
                     let bound_positions: Vec<usize> = args.iter()
                         .enumerate()
                         .filter_map(|(i, arg)| {
@@ -671,20 +700,31 @@ impl CodeGenerator {
                         open_braces.push("for");
                         current_indent.push_str("    ");
                     } else {
-                        // Find matching index
+                        // Find matching index - must match EXACT positions, not just count
+                        let expected_key_fields: Vec<String> = bound_positions.iter()
+                            .map(|&i| format!("arg{}", i))
+                            .collect();
+
                         let index = self.indexes.iter().find(|idx|
                             idx.item_struct == sg_struct.name &&
-                            idx.key_fields.len() == bound_positions.len()
+                            idx.key_fields == expected_key_fields
                         );
 
                         if let Some(index) = index {
+                            // Build key expressions matching the index's key_fields order
                             let key_exprs: Vec<String> = bound_positions.iter()
                                 .map(|&i| {
                                     if let Term::Var(v) = &args[i] {
                                         bindings.get(v).cloned()
                                             .unwrap_or_else(|| format!("/* unbound {} */", v))
+                                    } else if let Term::Const(c) = &args[i] {
+                                        match c {
+                                            Value::Int(n) => format!("{}", n),
+                                            Value::Symbol(s) => format!("/* symbol {} */", s),
+                                            _ => format!("/* const */"),
+                                        }
                                     } else {
-                                        format!("/* const at {} */", i)
+                                        format!("/* complex at {} */", i)
                                     }
                                 })
                                 .collect();
@@ -702,7 +742,7 @@ impl CodeGenerator {
                             } else {
                                 // HashMap lookup with if-let
                                 let key = if key_exprs.len() == 1 {
-                                    key_exprs[0].clone()
+                                    format!("{}", key_exprs[0])
                                 } else {
                                     format!("({})", key_exprs.join(", "))
                                 };
@@ -719,13 +759,55 @@ impl CodeGenerator {
                                 current_indent.push_str("    ");
                             }
                         } else {
-                            // Fallback: iterate over all
+                            // Fallback: iterate over all with filter
                             writeln!(code, "{}for (&{}, &{}) in &self.{}_values {{",
                                 current_indent, iter_var, val_var, functor.to_lowercase()
                             ).unwrap();
                             open_braces.push("for");
                             current_indent.push_str("    ");
+
+                            // Add constraint checks for bound variables
+                            let mut constraints = Vec::new();
+                            for &i in &bound_positions {
+                                if let Term::Var(v) = &args[i] {
+                                    if let Some(binding) = bindings.get(v) {
+                                        constraints.push(format!("{}.arg{} == {} as i64", iter_var, i, binding));
+                                    }
+                                }
+                            }
+                            if !constraints.is_empty() {
+                                writeln!(code, "{}if {} {{",
+                                    current_indent, constraints.join(" && ")
+                                ).unwrap();
+                                open_braces.push("if");
+                                current_indent.push_str("    ");
+                            }
                         }
+                    }
+
+                    // Add constraint checks for variables that appear multiple times in this subgoal
+                    // AND for join constraints with previously bound variables
+                    let mut join_constraints = Vec::new();
+                    for (i, arg) in args.iter().enumerate() {
+                        if let Term::Var(v) = arg {
+                            if let Some(existing) = bindings.get(v) {
+                                // This variable was already bound - add constraint check
+                                // But only if we're in a full scan (no index used)
+                                if bound_positions.contains(&i) {
+                                    // Already handled by index lookup
+                                } else {
+                                    // Variable appears but wasn't used in index - need constraint
+                                    join_constraints.push(format!("{}.arg{} == {} as i64", iter_var, i, existing));
+                                }
+                            }
+                        }
+                    }
+                    if !join_constraints.is_empty() {
+                        writeln!(code, "{}if {} {{",
+                            current_indent, join_constraints.join(" && ")
+                        ).unwrap();
+                        open_braces.push("if");
+                        current_indent.push_str("    ");
                     }
 
                     // Collect new bindings from this subgoal
