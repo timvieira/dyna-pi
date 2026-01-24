@@ -11,6 +11,7 @@
 pub mod chart;
 pub mod codegen;
 pub mod intern;
+pub mod parser;
 pub mod rule;
 pub mod semiring;
 pub mod solver;
@@ -19,6 +20,7 @@ pub mod term;
 
 // Re-exports for convenience
 pub use chart::Chart;
+pub use parser::{parse_program, parse_rule, parse_term, ParseError};
 pub use rule::{Program, Rule};
 pub use semiring::{Boolean, Count, Float, MaxTimes, MinPlus, Semiring};
 pub use solver::{Solver, SolverBuilder, SolverConfig, SolverStats};
