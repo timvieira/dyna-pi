@@ -31,7 +31,7 @@ jobs:
         sudo apt-get -y install graphviz
 
         python -m pip install --upgrade pip
-        python -m pip install flake8 pytest pytest-cov genbadge[coverage]
+        python -m pip install flake8 pytest pytest-cov
         pip install -e .
 
     - name: Lint with flake8
@@ -45,15 +45,9 @@ jobs:
       run: |
         pytest --cov=dyna --cov-report=xml --cov-report=term
 
-    - name: Generate coverage badge
-      run: |
-        genbadge coverage -i coverage.xml -o docs/coverage-badge.svg --local
-
-    - name: Commit coverage badge
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git add docs/coverage-badge.svg
-        git diff --staged --quiet || git commit -m "Update coverage badge [skip ci]"
-        git push
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.xml
+        fail_ci_if_error: false
