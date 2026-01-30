@@ -10,6 +10,7 @@ output
 *.zip
 venv
 .coverage
+coverage.xml
 htmlcov
 dist/*
 .coverage-report

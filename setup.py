@@ -7,7 +7,7 @@ setup(name='dyna',
       install_requires=[
           'arsenal @ git+https://github.com/timvieira/arsenal',
           'semirings @ git+https://github.com/timvieira/semirings',
-          'orderedset',
+          'ordered-set',
           'frozendict',
           'lark-parser',
           'ansi2html',
@@ -21,7 +21,7 @@ setup(name='dyna',
           'ipywidgets',
           # -------------------------------------------------------------------
           # development
-          'coveragepy',
+          'coverage',
           'pytest',
           'pytest-cov',
           'pytest-timeout',
