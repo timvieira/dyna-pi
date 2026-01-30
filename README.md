@@ -1,5 +1,5 @@
 ![Tests](https://github.com/timvieira/dyna-pi/actions/workflows/pytest.yml/badge.svg)
-[![codecov](https://codecov.io/gh/timvieira/dyna-pi/branch/main/graph/badge.svg)](https://codecov.io/gh/timvieira/dyna-pi)
+![Coverage](https://raw.githubusercontent.com/timvieira/dyna-pi/main/docs/coverage-badge.svg)
 
 # `dyna-pi`: Dynamic Program Improvement
 
