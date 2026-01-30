@@ -21,7 +21,7 @@ setup(name='dyna',
           'ipywidgets',
           # -------------------------------------------------------------------
           # development
-          'coveragepy',
+          'coverage',
           'pytest',
           'pytest-cov',
           'pytest-timeout',
