@@ -5,7 +5,7 @@ if [ -z "$COVERAGE" ]; then
     echo "running without coverage"
 else
     COVERAGE_OPTS="\
-      --cov-config=.coveragerc \
+      --cov-config=pyproject.toml \
       --cov dyna/
      "
    echo "running with coverage"
@@ -26,6 +26,6 @@ pytest --timeout 20 --color=yes $COVERAGE_OPTS $FILES
 if [ -z "$COVERAGE" ]; then
     echo "no coverage"
 else
-    coverage html --rcfile .coveragerc --include './*' -d .coverage-report
+    coverage html --rcfile pyproject.toml --include './*' -d .coverage-report
     xdg-open .coverage-report/index.html
 fi

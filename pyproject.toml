@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dyna"
+version = "0.9"
+description = ""
+authors = [
+    {name = "Tim Vieira"},
+]
+requires-python = ">=3.8"
+
+dependencies = [
+    "arsenal @ git+https://github.com/timvieira/arsenal",
+    "semirings @ git+https://github.com/timvieira/semirings",
+    "ordered-set",
+    "lark",
+    "ansi2html",
+    "z3-solver",
+    "sympy",
+    "graphviz",
+    "rich",
+    "IPython",
+    "svgling",
+    "pandas",
+    "ipywidgets",
+]
+
+[project.optional-dependencies]
+dev = [
+    "coverage",
+    "pytest",
+    "pytest-cov",
+    "pytest-timeout",
+]
+
+[tool.setuptools.packages.find]
+include = ["dyna*"]
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules"
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "assert False,.*",
+    "assert 0,.*",
+    "if 0:",
+    "if (self\\.)?DEBUG.*",
+    "if (self\\.)?debug.*",
+    "if (self\\.)?verbos(e|ity).*",
+    "if __name__ == .__main__.:",
+    "def todo_.*",
+]
+ignore_errors = true

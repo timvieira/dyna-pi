@@ -375,7 +375,6 @@ def setunset(obj, attr, val):
 # TODO: I don't like this solution, but the alterative is inefficient because it
 # is constantly doing hash+eq on programs.
 
-from frozendict import frozendict
 from functools import wraps
 
 class InstanceCache:
@@ -391,7 +390,7 @@ def instance_cache(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         cache = self._caches.get_cache(func)
-        key = (args, frozendict(kwargs.items()))
+        key = (args, tuple(sorted(kwargs.items())))
         if key in cache: return cache[key]
         result = func(self, *args, **kwargs)
         cache[key] = result
