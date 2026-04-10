@@ -769,17 +769,13 @@ def test_slashes():
     C = path.to_collection().lct().prune(max_depth=4)
     assert len(C) == 18
 
-    # It's possible that the racing method might give inconsistent winners as it uses wallclock time.
+    # The racing method may give inconsistent winners as it uses wallclock time,
+    # so just check that the winner produces the correct answer.
     (best_t, best_x, best_y) = C.prune_fast().race(run = lambda p: p(D, solver=2), tmin=0.01)
-    print(best_y)
-
-    best_x.assert_equal("""
-    (goal / goal).
-    (goal / beta([X|Xs])) += start(X) * goal / goal.
-    (goal / beta([Y|Xs])) += edge(X,Y) * goal / beta([X,Y|Xs]).
-    (goal / stop(X)) += goal / beta([X]).
-    goal += stop($X0) * goal / stop($X0).
-    """)
+    assert best_x is not None
+    want = path(D, solver=2).sol().user_query(term('goal'))
+    got = best_y.sol().user_query(term('goal'))
+    got.assert_equal(want)
 
 
 def test_program_collection_stuff():
