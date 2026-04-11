@@ -19,6 +19,10 @@ def isnum(Q): return isinstance(Q, (float, int, bool, np.int64, np.int32, np.flo
 def isstr(Q): return isinstance(Q, str)
 def isvar(Q): return isinstance(Q, Var)
 
+def assert_type(x, t):
+    if not isinstance(x, t): raise InstFault(f'expected {t.__name__}, got {x!r}')
+    return x
+
 
 class BuiltinConstaint(Term):
 
@@ -99,6 +103,12 @@ class Builtins:
 
         else:
             assert s == 'is' and q.arity == 2
+
+            if not isinstance(k, Term):
+                raise InstFault(
+                    f'`{q}`: RHS of `is` is a literal {k!r}, not an expression. '
+                    f'Use `=` instead of `is` for unification.'
+                )
 
             if k.arity == 1:
                 # X is Y * Z
@@ -187,7 +197,7 @@ class Builtins:
                         yield from unify(X, not assert_type(Y,bool))
                         return
                     if not isvar(X):
-                        yield from unify(Y, assert_type(X,bool))
+                        yield from unify(Y, not assert_type(X,bool))
                         return
 
             if k.arity == 2:
