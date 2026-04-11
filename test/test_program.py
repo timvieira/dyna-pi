@@ -771,7 +771,7 @@ def test_slashes():
 
     # The racing method may give inconsistent winners as it uses wallclock time,
     # so just check that the winner produces the correct answer.
-    (best_t, best_x, best_y) = C.prune_fast().race(run = lambda p: p(D, solver=2), tmin=0.01)
+    (best_t, best_x, best_y) = C.prune_fast().race(run = lambda p: p(D, solver=2), tmin=0.1)
     assert best_x is not None
     want = path(D, solver=2).sol().user_query(term('goal'))
     got = best_y.sol().user_query(term('goal'))
@@ -800,7 +800,7 @@ def test_program_collection_stuff():
     assert len(C) == 15, len(15)
 
     # It's possible that the racing method might give inconsistent winners as it uses wallclock time.
-    (best_t, best_x, best_y) = C.prune_fast().race(run = lambda p: p(D, solver=2), tmin=0.01)
+    (best_t, best_x, best_y) = C.prune_fast().race(run = lambda p: p(D, solver=2), tmin=0.1)
     print(best_y)
 
     best_x.assert_equal("""
