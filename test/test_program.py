@@ -1,6 +1,10 @@
+import os
+import pytest
 from arsenal import colors, assert_throws
 from dyna import Program, CostDegrees, term, Rule, \
     ProgramCollection, DynaParserException, gen_functor
+
+CI = os.environ.get('CI') == 'true'
 
 
 #def test_race():
@@ -749,6 +753,7 @@ def test_unfold_x():
     p.unfold_x(term('x'), verbosity=1000).assert_equal('goal += 1. goal += 1.')
 
 
+@pytest.mark.skipif(CI, reason="race() relies on wallclock timing, too slow for CI runners")
 def test_slashes():
 
     path = Program("""
@@ -778,6 +783,7 @@ def test_slashes():
     got.assert_equal(want)
 
 
+@pytest.mark.skipif(CI, reason="race() relies on wallclock timing, too slow for CI runners")
 def test_program_collection_stuff():
 
     path = Program("""
