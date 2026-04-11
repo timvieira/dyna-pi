@@ -41,7 +41,7 @@ include = ["dyna*"]
 [tool.pytest.ini_options]
 addopts = "--doctest-modules"
 testpaths = ["test", "dyna"]
-timeout = 120
+timeout = 30
 
 [tool.coverage.run]
 branch = true
