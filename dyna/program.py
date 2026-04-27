@@ -426,6 +426,65 @@ class Program:
 
     same = __eq__
 
+    def metric(self, other):
+        """Distance between two programs.
+
+        Shapes that get a tolerance-based numerical comparison (the
+        natural chart representation):
+          - Fully ground programs (every head and body is ground), or
+          - Programs whose rules each have a constant-only body but
+            possibly nonground heads.
+
+        After `constant_folding` both collapse to "every rule is
+        `head <op> Const(value)`". Heads are aligned modulo variable
+        renaming via `canonicalize`. The contribution is the max over
+        heads of `Semiring.metric(value_self, value_other)`, with heads
+        present in only one program contributing
+        `Semiring.metric(value, zero)`.
+
+        Rules with non-constant bodies (symbolic subgoals — the usual
+        case for arbitrary programs) fall back to structural equality:
+        contribution `0` if both programs have the exact same multiset
+        of symbolic rules (modulo variable renaming and subgoal
+        reordering, via the existing rule signature), `inf` otherwise.
+
+        The two contributions are combined via `max`.
+        """
+        if isinstance(other, (str, list)): other = Program(other)
+        if self.semiring is not None and other.semiring is None:
+            other = other.lift_semiring(self.semiring)
+        if other.semiring is not None and self.semiring is None:
+            self = self.lift_semiring(other.semiring)
+        a = self.constant_folding()
+        b = other.constant_folding()
+        sr = a.Semiring
+        A_chart, A_sym = a.chart, a.symbolic
+        B_chart, B_sym = b.chart, b.symbolic
+        # Numerical part: if both programs have the same chart-key set,
+        # max metric across paired values. If the key sets differ, the
+        # chart shapes are structurally different — return `inf` so
+        # callers using metric for fixpoint convergence keep propagating
+        # (matches the old `round(...) == round(...)` semantics where
+        # any added/removed rule made the structural `==` false).
+        if set(A_chart) != set(B_chart):
+            chart_d = float('inf')
+        else:
+            chart_d = max((sr.metric(A_chart[k], B_chart[k]) for k in A_chart),
+                          default=0)
+        # Structural part: symbolic rules must match exactly. Use the
+        # same bucketing / alignment as `Program.__eq__`.
+        sym_d = 0 if Program._symbolic_equal(A_sym, B_sym) else float('inf')
+        return max(chart_d, sym_d)
+
+    @staticmethod
+    def _symbolic_equal(rules_a, rules_b):
+        if len(rules_a) != len(rules_b): return False
+        R = defaultdict(list); S = defaultdict(list)
+        for r in rules_a: R[r._hash_cache].append(r)
+        for s in rules_b: S[s._hash_cache].append(s)
+        if R.keys() != S.keys(): return False
+        return all(Program._check_bucket(R[b], S[b]) for b in R)
+
     def _bucket_equal(self, other):
         # For efficiency, we first bucket rules by their signature.  The
         # signature is a hash that is invariant to subgoal reordering and
@@ -481,9 +540,9 @@ class Program:
         if other.semiring is not None and self.semiring is None:
             self = self.lift_semiring(other.semiring)
         assert self.semiring == other.semiring
-        a = self.constant_folding().round(precision)
-        b = other.constant_folding().round(precision)
-        assert a == b, '\n' + a._compare(b)
+        tol = 10 ** (-precision) if precision is not None else 0
+        d = self.metric(other)
+        assert d <= tol, f'\nmetric={d!r} > tol={tol!r}\n' + self._compare(other)
 
     def compare(self, other, **kwargs):
         "Compare rules in the program side by side."
@@ -492,8 +551,8 @@ class Program:
     def _compare(self, other, precision=None):
         "Compare rules in the program side by side."
         if isinstance(other, str): other = Program(other)
-        x = self.constant_folding().round(precision)
-        y = other.constant_folding().round(precision)
+        x = self.constant_folding()
+        y = other.constant_folding()
         return x._format_alignment(y, x.align(y))
 
     def _format_alignment(self, other, alignment):
@@ -1095,34 +1154,12 @@ class Program:
     # Constant folding, running builtins, constraint propagation
 
     def constant_folding(self):
-        q = []
-        for r in self:
-            r = self.constant_folding_rhs(r)
-            if r is not None:
-                q.append(r)
-        qq = TransformedProgram('constant_folding', self, q)
-        return qq.vertical_constant_folding()
-
-    def vertical_constant_folding(self):
-        "Merge rules with constant RHSs and equal heads (up to variable renaming)."
-
-        buckets = self.Semiring.chart()
-        new_rules = []
-
-        for r in self:
-
-            # If the RHS of r is a constant, we will merge it into some buckets
-            C = self.get_const_rhs(r)
-            if C is None:
-                new_rules.append(r)
-                continue
-            else:
-                buckets[canonicalize(r.head)] += C
-
-        for x, C in buckets.items():
-            new_rules.append(Rule(x, C))
-
-        return TransformedProgram('vertical_constant_folding', self, new_rules)
+        """Fold constants within each rule's body, drop rules whose
+        constant body folds to zero, and merge rules with constant RHSs
+        that share a head (up to variable renaming). See
+        `ConstantFolded` for the result shape.
+        """
+        return ConstantFolded(self)
 
     # XXX: Warning! this implementation assumes multiplication is commutative.
     def constant_folding_rhs(self, r):
@@ -1134,7 +1171,7 @@ class Program:
                 C *= deref(x)     # Note: `deref` here in case a subgoal was a bare variable
             else:
                 xs.append(x)
-        if self.Semiring.approx_zero(C):  # drop the rule
+        if self.Semiring.metric(C, self.Semiring.zero) <= 1e-7:  # drop the rule
             return
         elif C == self.Semiring.one and len(xs) > 0:
             return Rule(r.head, *xs)
@@ -1150,6 +1187,8 @@ class Program:
             if self.is_const(x):
                 return x
 
+    # TODO: add the dual of this method that normalizes unfications to a
+    # collection of shallow equality predicates.
     def snap_unifications(self):
         new = self.spawn()
         for r in self:
@@ -1814,6 +1853,86 @@ class Define(TransformedProgram):
 
         self.defs = defs
         super().__init__('define', parent, list(parent) + list(defs))
+
+
+class ConstantFolded(TransformedProgram):
+    """Output of `Program.constant_folding`. Folds per-rule constants,
+    drops rules whose constant body folds to zero, and merges rules
+    that share a canonical (head, symbolic-body) skeleton — the
+    constant coefficients of mergeable rules are accumulated via the
+    semiring `+`.
+
+    The skeleton-based merge generalizes the original "single-constant
+    body" vertical-fold: rules like
+
+        a(X,Y) += 1.0  * (X<Y).
+        a(X,Y) += 0.5  * (X<Y).
+        a(X,Y) += 0.25 * (X<Y).
+
+    all share the canonical skeleton `(a(X,Y), [(X<Y)])` and merge
+    into a single `a(X,Y) += 1.75 * (X<Y).`.
+
+    Cached attributes:
+
+    - `chart`: `{canonical_head: value}` for rules whose folded body is
+      a single semiring constant (skeleton has empty symbolic part).
+    - `merged`: `{skeleton_key: (head, xs, value)}` for rules with
+      a symbolic body — `value` is the accumulated coefficient,
+      `xs` the (representative) symbolic subgoals.
+    - `symbolic`: list of merged rules emitted from `merged`. Kept
+      under the historical name so `Program.metric` can read it.
+    """
+    def __init__(self, parent):
+        sr = parent.Semiring
+        # First pass: per-rule fold; drops zero-folded rules.
+        intermediate = []
+        for r in parent:
+            r = parent.constant_folding_rhs(r)
+            if r is not None:
+                intermediate.append(r)
+        # Second pass: bucket by canonical (head, symbolic-body)
+        # skeleton; accumulate the constant coefficient. The pure-
+        # chart case (empty symbolic) stays in `chart`; the symbolic
+        # case stays in `merged`, keyed by the canonical skeleton.
+        chart = sr.chart()
+        merged = {}
+        for r in intermediate:
+            C, xs = self._split_const_and_symbolic(parent, r)
+            if not xs:
+                chart[canonicalize(r.head)] += C
+            else:
+                key = canonicalize(Term('$skel', r.head, *xs))
+                if key in merged:
+                    head_, xs_, total = merged[key]
+                    merged[key] = (head_, xs_, total + C)
+                else:
+                    merged[key] = (r.head, xs, C)
+        self.chart = chart
+        self.merged = merged
+        # Emit one rule per merged bucket. Drop the explicit C when
+        # it's the multiplicative identity (the same convention as
+        # `constant_folding_rhs`).
+        symbolic = []
+        for head, xs, total in merged.values():
+            if total == sr.one:
+                symbolic.append(Rule(head, *xs))
+            else:
+                symbolic.append(Rule(head, total, *xs))
+        self.symbolic = symbolic
+        rules = list(symbolic) + [Rule(x, C) for x, C in chart.items()]
+        super().__init__('constant_folding', parent, rules)
+
+    @staticmethod
+    def _split_const_and_symbolic(parent, r):
+        """Return `(C, xs)` where `C` is the constant coefficient of
+        `r` (defaulting to `Semiring.one`) and `xs` is the list of
+        non-constant body subgoals. After `constant_folding_rhs`, a
+        rule's body is either `[*xs]` (no explicit constant, C=1) or
+        `[C, *xs]` (constant in body[0]).
+        """
+        if r.body and parent.is_const(r.body[0]):
+            return deref(r.body[0]), list(r.body[1:])
+        return parent.Semiring.one, list(r.body)
 
 
 from dyna.programs import ProgramCollection

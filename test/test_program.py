@@ -613,7 +613,10 @@ def test_fancy_steps():
     # values.  Perhaps it should.  Another thought is that this type of folding
     # could/should be left for something like speculation (kind of weird to
     # imagine speculation running in the "projection" step of forward chaining,
-    # but maybe not?)  Related to: https://github.com/timvieira/dyna-pi/issues/23
+    # but maybe not?)  Related to: https://github.com/timvieira/dyna-pi-dev/issues/23
+    #
+    #  [2026-04-27 Mon] This example now works, but we haven't revisted the issue
+    #
     from dyna.propagate import ConstraintPropagation
     rewrites = ConstraintPropagation('')   # propagation only removes duplicates in this case.
 
@@ -630,8 +633,12 @@ def test_fancy_steps():
     a(X,Y) += a(X,Y) * 0.5 * (X < Y).
     """)
 
-    m = p.fc(max_iter=6, proj=proj)
+    m = p.fc(max_iter=50, proj=proj)
     print(m)
+
+    m.assert_equal("""
+    a(X,Y) += 1.9999999999999982 * (X < Y).
+    """)
 
     #m2 = p.solver3()(max_iter=7).sol()
     #m.assert_equal(m2)

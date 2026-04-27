@@ -41,10 +41,10 @@ accuracy:  {P(tp+tn, tp+tn+fp+fn)}\
 class compare(analyze_predictions):
     def __init__(self, ref, xs, m, D='', sol=None, verbose=False):
         assert len(xs) > 0
-        if sol is None: sol = (ref+D).sol().round(precision=3)
+        if sol is None: sol = (ref+D).sol().constant_folding()
         have = set(); want = set()
         for x in xs:
-            correct = ((x+D).sol().round(precision=3) == sol)
+            correct = ((x+D).sol().metric(sol) <= 1e-3)
             safe = m(x)
             if verbose: print(colors.mark(correct), colors.mark(safe), x)
             if correct: want.add(x)

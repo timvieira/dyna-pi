@@ -128,7 +128,7 @@ def test_catalan_slow():
 
     """)
 
-    have = p.newton(verbosity=2, fmt=lambda x: x.round(4).__repr__(numbered=0))
+    have = p.newton(verbosity=2, fmt=lambda x: x.__repr__(numbered=0))
 
     #want = p.sol()
     #want = p.fc()

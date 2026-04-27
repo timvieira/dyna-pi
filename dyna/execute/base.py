@@ -1,6 +1,7 @@
-from dyna import Program, Rule, term, Float, fresh, Product
+from dyna import Program, Rule, term, fresh, Product
 from dyna.builtin import Builtins
 from arsenal.robust import timelimit, Timeout
+from semirings import Float
 
 
 tupleone = Product()
@@ -14,9 +15,9 @@ class BaseSolver:
         self.builtins = Builtins(None)
 
         self.program = program
-        self.Weight = self.program.Semiring
-        self.zero = self.program.Semiring.zero
-        self.one = self.program.Semiring.one
+        self.Weight = self.program.Semiring if self.program.Semiring is not None else Float
+        self.zero = self.Weight.zero
+        self.one = self.Weight.one
         self.prefix_firings = 0
 
         self.interrupted = False
@@ -52,13 +53,16 @@ class BaseSolver:
     def assert_equal_query(self, q, want, **kwargs):
         return self.sol().assert_equal_query(q, want, **kwargs)
 
-    # XXX: Defer to a semiring-specific defn that lives in the semiring class?
     def approx_equal(self, x, y):
-        if self.Weight != Float and self.Weight is not None:
-            return x == y
-        else:
-            # direct equality is useful for comparing values like infinity
-            return x == y or abs(x - y) <= self.tol
+        # Defer to the semiring's own distance function. Each semiring
+        # implements `metric` with the right notion of distance for its
+        # space (Float: normalized abs-diff; LogVal: same on lowered
+        # values; discrete semirings inherit `0 if ==, 1 otherwise`),
+        # so this works polymorphically without depending on `__eq__`
+        # being exact — important for LogVal, whose stock `__eq__` uses
+        # `np.allclose` and would collapse small-but-distinct values,
+        # causing premature fixpoint convergence here.
+        return self.Weight.metric(x, y) <= self.tol
 
     #___________________________________________________________________________
     # Inference methods
