@@ -770,7 +770,7 @@ class Program:
         mapping = {x: i for i, xs in enumerate(t) for x in xs}
         return mapping
 
-    def agenda(self, precision=6):
+    def agenda(self, precision=6, max_iter=np.inf):
         "Agenda-based semi-naive evaluation"
 
         old = Program(semiring=self.Semiring)
@@ -778,7 +778,11 @@ class Program:
         change.has_builtins = False   # doesn't even matter in this setting because constants and builtins never go on the agenda.
         new = Program(semiring=self.Semiring)
 
-        while len(change) > 0:
+        tol = 10 ** (-precision) if precision is not None else 0
+
+        t = 0
+        while len(change) > 0 and t < max_iter:
+            t += 1
 
             # pick an arbitrary rule from the change buffer
             #i = int(np.random.randint(len(change)))
@@ -788,7 +792,7 @@ class Program:
             was = new.user_lookup(u.head)
             new.update(u.head, *u.body)
             now = new.user_lookup(u.head)
-            if was.round(precision) == now.round(precision): continue
+            if was.metric(now) <= tol: continue
 
             for r in self:                      # TODO: use indexing here
                 for k in range(len(r.body)):
