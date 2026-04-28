@@ -681,7 +681,11 @@ def _canonicalize(x, vs):
             return y
 
     elif isinstance(x, Term):
-        return x.__class__(*[_canonicalize(y, vs) for y in x.fargs])
+        # Dispatch through `fresh` so Term subclasses with non-variadic
+        # `__init__`s (e.g. `Derivation(D, p, I)`, where `fargs` is
+        # `(head, *body)` rather than the constructor's own positional
+        # arguments) can override `fresh` and stay canonicalizable.
+        return x.fresh(lambda y: _canonicalize(y, vs))
 
 #    elif isinstance(x, list):
 #        return [_canonicalize(a, vs) for a in x]

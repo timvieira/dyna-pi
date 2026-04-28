@@ -73,6 +73,19 @@ def to_collection(f):
     return wrapper
 
 
+def _subgoal_sort_key(x):
+    """Total order on body subgoals, used by `ConstantFolded` to put
+    bodies into a canonical order before bucketing (so that rules
+    differing only in multiplicative reordering — `*` is commutative —
+    merge). Falls back to a string repr when subgoals don't expose a
+    structural signature.
+    """
+    try:
+        return ('term', repr(canonicalize(x)) if isinstance(x, Term) else repr(x))
+    except TypeError:
+        return ('opaque', repr(x))
+
+
 class Program:
     def __init__(self, rules='', inputs=None, outputs=None, semiring=None, has_builtins=True):
         if isinstance(rules, str):
@@ -1890,34 +1903,50 @@ class ConstantFolded(TransformedProgram):
             r = parent.constant_folding_rhs(r)
             if r is not None:
                 intermediate.append(r)
-        # Second pass: bucket by canonical (head, symbolic-body)
-        # skeleton; accumulate the constant coefficient. The pure-
-        # chart case (empty symbolic) stays in `chart`; the symbolic
-        # case stays in `merged`, keyed by the canonical skeleton.
-        chart = sr.chart()
+        # Second pass: bucket rules by canonical (head, symbolic-body)
+        # skeleton, accumulating the constant coefficient. Pure-chart
+        # rules (empty symbolic) and rules with mergeable symbolic
+        # bodies (e.g. `a(X,Y) += c1 * b(X,Y)` and `a(X,Y) += c2 *
+        # b(X,Y)` collapsing to `a(X,Y) += (c1+c2) * b(X,Y)`) share
+        # this code path.
+        #
+        # Body subgoals are sorted into a canonical order before the
+        # skeleton key is built so that rules differing only in
+        # multiplicative reordering (`*` is commutative) merge.
+        #
+        # Some Term subclasses (e.g. `Derivation`) have non-variadic
+        # `__init__`s and don't survive `canonicalize` — those rules
+        # fall back to "skeleton key is the rule itself", which keeps
+        # them un-merged but doesn't crash.
         merged = {}
         for r in intermediate:
             C, xs = self._split_const_and_symbolic(parent, r)
-            if not xs:
-                chart[canonicalize(r.head)] += C
+            # Bucket key uses xs in canonical order (so commutative `*`
+            # reorderings merge), but the emitted rule keeps the
+            # first-seen rule's xs order — downstream code (e.g.
+            # `Program.unfold(rule_i, subgoal_j)`) refers to subgoals
+            # by position and would be sensitive to a reorder here.
+            xs_sorted = sorted(xs, key=_subgoal_sort_key)
+            key = canonicalize(Term('$skel', r.head, *xs_sorted))
+            if key in merged:
+                head_, xs_, total = merged[key]
+                merged[key] = (head_, xs_, total + C)
             else:
-                key = canonicalize(Term('$skel', r.head, *xs))
-                if key in merged:
-                    head_, xs_, total = merged[key]
-                    merged[key] = (head_, xs_, total + C)
-                else:
-                    merged[key] = (r.head, xs, C)
-        self.chart = chart
-        self.merged = merged
+                merged[key] = (r.head, xs, C)
         # Emit one rule per merged bucket. Drop the explicit C when
         # it's the multiplicative identity (the same convention as
         # `constant_folding_rhs`).
+        chart = sr.chart()
         symbolic = []
         for head, xs, total in merged.values():
-            if total == sr.one:
+            if not xs:
+                chart[canonicalize(head)] += total
+            elif total == sr.one:
                 symbolic.append(Rule(head, *xs))
             else:
                 symbolic.append(Rule(head, total, *xs))
+        self.chart = chart
+        self.merged = merged
         self.symbolic = symbolic
         rules = list(symbolic) + [Rule(x, C) for x, C in chart.items()]
         super().__init__('constant_folding', parent, rules)
