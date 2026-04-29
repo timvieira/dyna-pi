@@ -241,6 +241,21 @@ def test_normalize():
 
     q.snap_unifications().assert_equal(p.snap_unifications())
 
+    # Idempotency: normalizing an already-normalized program is a no-op.
+    # Pre-fix this added alias chains like ($Gen' = $Gen, $Gen = T) to
+    # every shallow `=` constraint on each successive call.
+    for src in [
+        "f(X, g(h(Y))) += (X=Y) * 2.",
+        "goal(W) += foo(X), bar([X|Xs], W).",
+        "item([X|Xs]) += word(X), item(Xs).",
+        "p(X) += q(X), r(Y), s(X, Y).",
+    ]:
+        n1 = Program(src).normalize_unification2()
+        n2 = n1.normalize_unification2()
+        assert str(n1) == str(n2), (
+            f"normalize_unification2 not idempotent on {src!r}:\n"
+            f"  pass 1: {n1}\n  pass 2: {n2}")
+
     p = Program("""
     goal += 1 is 2+4.
     f(X,Y) += X is 2+4, Y is X+1.

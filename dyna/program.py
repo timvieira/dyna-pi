@@ -1559,6 +1559,27 @@ class Program:
         return TransformedProgram('linearize-rhs', self, new_rules)
 
     def normalize_unification2(self):
+        """
+        Normalize each rule so every body subgoal is either a flat predicate
+        call (all args are Vars) or a shallow unification `V = T(V1, ..., Vn)`
+        / `V = V'` / `V = constant`. Nested term structure in the head or body
+        is lifted into fresh `=` constraints.
+
+        The dual of this method (`snap_unifications`) resolves all
+        unifications by inlining.
+
+        Idempotent: calling on an already-normalized program is a no-op
+        (modulo the transform-name wrapper). Body subgoals that are already
+        in normal form are recognized and passed through unchanged, instead
+        of getting re-wrapped with fresh-Var alias chains like
+        `$Gen' = $Gen, $Gen = T`.
+
+        >>> p = Program('goal(W) += foo(X), bar([X|Xs], W).')
+        >>> n1 = p.normalize_unification2()
+        >>> n2 = n1.normalize_unification2()
+        >>> str(n1) == str(n2)
+        True
+        """
 
         # TODO: We currently have an issue with (S is X' + S') because it is a
         # nested term with outer functor `is`.
@@ -1593,14 +1614,34 @@ class Program:
             f(x)
             return result
 
+        def is_normal_form(y):
+            """A body subgoal is in normal form if it is either a flat call
+            `pred(V1, ..., Vn)` (all args are Vars) or a shallow unification
+            `V = T(V1, ..., Vn)` / `V = V'` / `V = constant`."""
+            if not isinstance(y, Term):
+                return False
+            if y.fn == '=' and len(y.args) == 2:
+                v, rhs = y.args
+                if not isinstance(v, Var):
+                    return False
+                if isinstance(rhs, Var):
+                    return True
+                if isinstance(rhs, Term):
+                    return all(isinstance(a, Var) for a in rhs.args)
+                return True  # constant
+            return all(isinstance(a, Var) for a in y.args)
+
         nrs = []
         for r in self:
             [*tmps, [_, _, h]] = normalize(r.head)
             ys = list(tmps)
             for y in r.body:
-                [*tmps, [_, _, yy]] = normalize(y)
-                ys.extend(tmps)
-                ys.append(yy)
+                if is_normal_form(y):
+                    ys.append(y)
+                else:
+                    [*tmps, [_, _, yy]] = normalize(y)
+                    ys.extend(tmps)
+                    ys.append(yy)
 
             nrs.append(Rule(h, *ys))
 
