@@ -17,14 +17,14 @@ dependencies = [
     "ordered-set",
     "lark",
     "ansi2html",
-    "z3-solver",
+    "z3-solver>=4.13",
     "sympy",
     "graphviz",
     "rich",
     "IPython",
     "svgling",
     "pandas",
-    "ipywidgets",
+    "ipywidgets>=8.1",
 ]
 
 [project.optional-dependencies]

@@ -124,8 +124,16 @@ class Measure:
 #        elif isinstance(new, Abbreviate):
 #            return self._measure_abbreviate(new)
         else:
-#            raise NotImplementedError(f'{type(new)} {new}')
             assert not isinstance(new, TransformedProgram), [new.name, type(new)]
+            import warnings
+            warnings.warn(
+                f'Measure-based safety checking could not produce a measure for '
+                f'transformation of type {type(new).__name__}.\n'
+                f'  If this is a `defs` argument to fold/unfold, build it via '
+                f'`<root_program>.define(rule_text)` so it shares the operation\'s '
+                f'root and the SMT measure can track it.\n'
+                f'program=\n{new}'
+            )
             return measure_safety([Interval(0,0)]*len(new), new, safe=[False])
 #            raise KeyError((type(new).__name__, new))
 

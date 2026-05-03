@@ -53,8 +53,7 @@ def join_f(f, *xs):
 #        for d1 in f(xs[0]):
 #            for d2 in join(f, xs[1:]):
 #                yield (d1, *d2)
-#
-#
+
 #def joinv(f, xs, one):
 #    assert isinstance(xs, tuple), xs
 #    if len(xs) == 0: yield one
@@ -63,7 +62,6 @@ def join_f(f, *xs):
 #            for d2 in joinv(f, xs[1:], one):
 #                yield d1 * d2
 
-# TODO: untested
 #def explicit_sips(f, x, subst0):     # assumes the function f returns a stream of pairs
 #    assert isinstance(x, tuple), x
 #    if len(x) == 0:
@@ -254,7 +252,6 @@ class Product(tuple):
         for j in sorted(js):
             yield from self._match_comm(ys=ys, i=i+1, js=js - {j}, s=s.copy().cover(self[i], ys[j]))
 
-    # TODO: subproduct and cover should have the same API
 #    def subproduct(self, ys):
 #        "enumerate continguous subproducts of `self` (for non-commutative semirings)."
 #        xs = self
@@ -693,7 +690,6 @@ def _canonicalize(x, vs):
 #    elif isinstance(x, tuple):
 #        return tuple([_canonicalize(a, vs) for a in x])
 
-    # TODO: dict?
 #    elif isinstance(x, (set, frozenset)):
 #        return frozenset([_canonicalize(k, vs) for k in sorted(x)])
 

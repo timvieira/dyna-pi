@@ -1204,9 +1204,13 @@ class Program:
             if self.is_const(x):
                 return x
 
-    # TODO: add the dual of this method that normalizes unfications to a
-    # collection of shallow equality predicates.
     def snap_unifications(self):
+        """
+        Resolve all unification constraints.
+
+        The dual of this method (`normalize_unification2`) normalizes unfications to a
+        collection of shallow equality predicates.
+        """
         new = self.spawn()
         for r in self:
             for ys in r.body.snap_unifications():
@@ -1913,6 +1917,7 @@ class Define(TransformedProgram):
         super().__init__('define', parent, list(parent) + list(defs))
 
 
+# TODO: move to transform submodule
 class ConstantFolded(TransformedProgram):
     """Output of `Program.constant_folding`. Folds per-rule constants,
     drops rules whose constant body folds to zero, and merges rules
@@ -1928,7 +1933,9 @@ class ConstantFolded(TransformedProgram):
         a(X,Y) += 0.25 * (X<Y).
 
     all share the canonical skeleton `(a(X,Y), [(X<Y)])` and merge
-    into a single `a(X,Y) += 1.75 * (X<Y).`.
+    into a single rules:
+
+        a(X,Y) += 1.75 * (X<Y).
 
     Cached attributes:
 
