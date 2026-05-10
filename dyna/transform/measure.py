@@ -8,6 +8,7 @@ from dyna import Program, TransformedProgram
 #from dyna.analyze.abbreviate import Abbreviate
 from dyna.derivations import Derivation, Product
 from dyna.program import Define
+from dyna.term import fresh, unifies
 from dyna.transform import Fold, Unfold, Slash, LCT
 
 
@@ -185,7 +186,57 @@ class Measure:
         #if not new.partially_safe: return self._measure_reversible_fold(new)
         return self._measure_generalized_fold(new)
 
+    def _freshness_violations(self, parent, defs):
+        """For fold/unfold safety: every Define operation in `defs`'s lineage
+        must also appear in `parent`'s lineage. Otherwise `defs` is carrying
+        a rule (or rules) that `parent` never agreed to — a "sibling Define"
+        — and folding/unfolding via that rule silently introduces an equation
+        the algebra never checks for consistency with `parent`'s definitions.
+
+        For each foreign Define in `defs`'s lineage, we report a violation
+        when any of its new rule heads unifies with any head in `parent`.
+
+        Returns the list of (defs_rule, parent_head) pairs that violate..
+        """
+        parent_stage_ids = {id(s) for s in parent.lineage()}
+        violations = []
+        for stage in defs.lineage():
+            if not isinstance(stage, Define):
+                continue
+            if id(stage) in parent_stage_ids:
+                continue
+            # This Define is in defs's lineage but NOT in parent's. Its new
+            # rules are foreign to parent. Flag any whose head clashes.
+            for idx in stage._new_ix:
+                d_rule = stage.rules[idx]
+                for p_rule in parent.rules:
+                    if unifies(fresh(d_rule.head), fresh(p_rule.head)):
+                        violations.append((d_rule, p_rule.head))
+                        break
+        return violations
+
     def _measure_generalized_fold(self, new):
+        # Common-ancestor precondition. The fold's rule-measure relations only
+        # make sense if `parent` and `defs` descend from the same root program
+        # (so their measure variables were allocated against a shared rule-index
+        # basis). Build defs via `<root>.define(rule_text)` where <root> is the
+        # same root program as the fold's parent. We KEEP this as an assertion
+        # because failing it indicates a usage error (not a safety verdict) —
+        # the measure simply cannot be computed when measure-variable bases differ.
+        assert new.parent.root is new.defs.root, (
+            f"Fold's parent and defs must share a root program "
+            f"(got parent.root id={id(new.parent.root)}, "
+            f"defs.root id={id(new.defs.root)}). Build defs via "
+            f"`<root>.define(rule_text)` against the fold's root."
+        )
+        # Freshness precondition: any rule in `defs` not already in `parent`
+        # (and not in the shared root) introduces an equation the algebra
+        # cannot verify against parent's existing definitions. Return an
+        # unsafe measure rather than raising, so search/filter pipelines
+        # using `m.safe` reject these candidates cleanly.
+        violations = self._freshness_violations(new.parent, new.defs)
+        if violations:
+            return measure_safety([Interval(0, 0)] * len(new), new, safe=[False])
         m_new = [None]*len(new)
         m_parent = self(new.parent); m_defs = self(new.defs)
         diffs = [m_parent.m[P] - m_defs.m[D] for P,D in new.par2def.items()]
@@ -206,6 +257,19 @@ class Measure:
 
     def _measure_unfold(self, new):
         assert isinstance(new, Unfold) #and new.undo == new.parent
+
+        # Common-ancestor precondition; see _measure_generalized_fold for rationale.
+        assert new.parent.root is new.defs.root, (
+            f"Unfold's parent and defs must share a root program "
+            f"(got parent.root id={id(new.parent.root)}, "
+            f"defs.root id={id(new.defs.root)}). Build defs via "
+            f"`<root>.define(rule_text)` against the unfold's root."
+        )
+        # Freshness precondition (returns unsafe measure rather than raising;
+        # see _measure_generalized_fold for rationale).
+        violations = self._freshness_violations(new.parent, new.defs)
+        if violations:
+            return measure_safety([Interval(0, 0)] * len(new), new, safe=[False])
 
         m_new = [None]*len(new)
         m_parent = self(new.parent); m_defs = self(new.defs)

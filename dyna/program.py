@@ -273,12 +273,14 @@ class Program:
         q.semiring = Boolean
         return q
 
-    def round(self, precision):
-        if precision is None: return self
-        return TransformedProgram(
-            ('round', precision), self,
-            [r.round(precision) for r in self.rules],
-        )
+#    def round(self, precision):
+#        import warnings
+#        warnings.warn('We are going to retire this method as soon as possible; use metric for comparisons.')
+#        if precision is None: return self
+#        return TransformedProgram(
+#            ('round', precision), self,
+#            [r.round(precision) for r in self.rules],
+#        )
 
     #___________________________________________________________________________
     # Add remove/access rules
@@ -696,19 +698,19 @@ class Program:
         s(data, budget=budget, throw=throw, kill=kill)
         return s
 
+    # TODO: Solver.sol() and Program.solve() should probably be unified; same for __call__ probably
     def solve(self, *args, **kwargs):
         return self(*args, **kwargs).sol()
 
     def user_query(self, q):
-        #assert not self.inputs
+        "Query the chart for a subset of items matching the query `q`."
         return self.solver2().user_query(q)
 
     def assert_equal_query(self, query, want, **kwargs):
+        "Check that the `query` against `self` is equal to `want`."
         if isinstance(query, str): query = syntax.term(query)
-        if isinstance(want, (float, int)):
-            want = Program([Rule(query, want)])
-        if isinstance(want, base.Semiring):
-            want = Program([Rule(query, want)], semiring=type(want))
+        if isinstance(want, (float, int)): want = Program([Rule(query, want)])
+        if isinstance(want, base.Semiring): want = Program([Rule(query, want)], semiring=type(want))
         self.user_query(query).assert_equal(want, **kwargs)
 
     def solve_linear(self):
@@ -723,7 +725,8 @@ class Program:
         from dyna.execute.solver2 import Solver
         return Solver(self, **kwargs)
 
-    def fc(self, max_iter=None, chart=None, verbose=False, proj=lambda p: p):
+    # TODO: add the precision option like agenda.
+    def fc(self, *, max_iter=None, chart=None, verbose=False, proj=lambda p: p):
         "Naive forward chaining (possibly with delayed constraints)"
         old = Program([], Program([]), Program([]), semiring=self.Semiring) if chart is None else chart
         for m in (range(max_iter) if max_iter is not None else count()):
@@ -770,7 +773,7 @@ class Program:
         mapping = {x: i for i, xs in enumerate(t) for x in xs}
         return mapping
 
-    def agenda(self, precision=6, max_iter=np.inf):
+    def agenda(self, *, precision=6, max_iter=np.inf):
         "Agenda-based semi-naive evaluation"
 
         old = Program(semiring=self.Semiring)
@@ -1151,7 +1154,7 @@ class Program:
         return syms
 
     def gen_functor(self, prefix='$gen'):
-        "Generate a functor that does not appear in this program."
+        "Generate a fresh item name that does not appear in `self` to avoid collisions"
         # Global counter
         f = gen_functor(prefix)
         assert f not in self.syms
@@ -1496,6 +1499,7 @@ class Program:
 
     @instance_cache
     def prune_fast(self, **kwargs):
+        "Program specialization: remove dead and useless rules with coarse-grained reachability analysis"
         from dyna.analyze.dead import prune_fast
         return prune_fast(self, **kwargs)
 
@@ -1510,10 +1514,13 @@ class Program:
 
     @instance_cache
     def prune(self, specialize=True, bottom_up_only=False, **kwargs):
+        """
+        Program specialization: remove dead and useless rules with fine-grained reachability analysis,
+        and it will specialize rules (including splitting) when static variable assignments are known.
+        """
         from dyna.analyze.dead import _prune_specialize, _prune_dead
         if bottom_up_only:
-            s = self.type_analysis(input_type=self.inputs,  # TODO: not a good default
-                                   rewrites='', use_insts=False, **kwargs)
+            s = self.type_analysis(input_type=self.inputs, rewrites='', use_insts=False, **kwargs)
         else:
             s = self.usefulness_analysis(**kwargs)
         if specialize:
@@ -1524,6 +1531,7 @@ class Program:
     # TODO: Should the default behavior for `abbreviate` be to abbreviate with
     # respect to the /useful/ items rather than the /possible/ items?
     def abbreviate(self, *, types=None, **kwargs):
+        "Program specialization transformation that will split items based on inferred, disjoint simple types"
         from dyna.analyze.abbreviate import Abbreviate
         if types is None: types = self.type_analysis()
         #if types is None: types = self.usefulness_analysis()
@@ -1906,15 +1914,24 @@ class TransformedProgram(Program):
         self.root = parent.root
 
 
+# TODO: add a check for overlap -- if we add a new rule it needs a distinct name
+# space (i.e., a sufficient "fresh" name) or else we run the risk of this
+# transformation not being semantics-preserving.  It is more naunced than this,
+# as this has to be the case for *all* programs in a provenance tree.  Note that
+# Tim's thesis makes the simplifying assumption that all definitions appear in
+# the original program so all transformed programs inherit from it.  We may also
+# need to assume that unfold/fold by `defs` need to have related transformation
+# histories they can't be unrelated programs as they should have incompatible
+# measure (need to check if the measure safety system actually gets that
+# right!).
+#
 class Define(TransformedProgram):
     "Definition introduction transform"
     def __init__(self, parent, defs):
-
         self._old_ix = range(len(parent))
         self._new_ix = range(len(parent), len(parent) + len(defs))
-
         self.defs = defs
-        super().__init__('define', parent, list(parent) + list(defs))
+        super().__init__(f'define({defs})', parent, list(parent) + list(defs))
 
 
 # TODO: move to transform submodule

@@ -86,9 +86,11 @@ class Rule(Term):
             )
         )
 
-    def round(self, precision):
-        return Rule(self.head, *[round(x, precision) if is_const(x) else x
-                              for x in self.body])
+#    def round(self, precision):
+#        import warnings
+#        warnings.warn('We are going to retire this method as soon as possible; use metric for comparisons.')
+#        return Rule(self.head, *[round(x, precision) if is_const(x) else x
+#                                 for x in self.body])
 
     #___________________________________________________________________________
     # Utils / Manipulation / Inference / Transformation
