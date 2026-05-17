@@ -56,7 +56,18 @@ class Solver(BaseSolver):
 
         self.pushes += 1
 
-        item = self.intern(fresh(item))
+        t = fresh(item)
+
+        # Consult `priority` on the item TERM, *before* interning or
+        # recording it; a pruned update leaves no trace (see solver2).
+        if self.priority is None:
+            p = -self.pushes
+        else:
+            p = self.priority(t)
+            if p is None:                # prune: discard entirely
+                return
+
+        item = self.intern(t)
 
         if self.debug: print(f'    {colors.yellow % "push"}: {self.intern[item]} += {Δ}')
         if item not in self.change:
@@ -65,13 +76,7 @@ class Solver(BaseSolver):
         else:
             self.change[item] += Δ
 
-        # Roughly FIFO
-        if self.priority is None:
-            p = -self.pushes
-        else:
-            p = self.priority(item)
-        if p is not None:                # p = None ==> prune update
-            self.agenda[item] = p
+        self.agenda[item] = p
 
     def _forward_chaining(self):
         for r in self.program: self.init_rule(r)

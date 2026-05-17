@@ -748,7 +748,7 @@ class Program:
     def scc_solver(self, solver=1):
         # Run forward chaining in the Boolean semiring to approximate the set of hyperedges in P(D).
         scc = self._sccs_by_boolean_pass(solver=solver)
-        solver = (self.solver if solver == 1 else self.solver2)(priority=lambda i: scc.get(solver.intern[i]), AgendaType=BucketQueue)
+        solver = (self.solver if solver == 1 else self.solver2)(priority=lambda i: scc.get(i), AgendaType=BucketQueue)
         return solver()
 
     def _sccs_by_boolean_pass(self, solver):

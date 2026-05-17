@@ -60,24 +60,29 @@ class Solver(BaseSolver):
 
         item = fresh(item)
         item = canonicalize(item)
-        item = self.intern(item)
 
         self.pushes += 1
-        if item not in self.change:
-            self.change[item] = Δ
-        else:
-            self.change[item] += Δ
 
-        # Residual-based prioritization isn't generally good.
-        #self.agenda[item] = abs(self.change[item])
-
-        # Roughly FIFO
+        # Consult `priority` on the item TERM, *before* interning or
+        # recording it. A pruned update (priority -> None) must leave
+        # no trace: otherwise a rule that grounds out unboundedly many
+        # distinct pruned items still blows up `self.intern` /
+        # `self.change` even though nothing reaches the agenda/chart.
+        # (Previously `priority` received the interned *int*, and the
+        # prune happened only after intern + change-buffer insertion.)
         if self.priority is None:
             p = -self.pushes
         else:
             p = self.priority(item)
-        if p is not None:                # p = None ==> prune update
-            self.agenda[item] = p
+            if p is None:                # prune: discard entirely
+                return
+
+        item = self.intern(item)
+        if item not in self.change:
+            self.change[item] = Δ
+        else:
+            self.change[item] += Δ
+        self.agenda[item] = p
 
     def __setitem__(self, item, v):
         # TODO: update indexes
