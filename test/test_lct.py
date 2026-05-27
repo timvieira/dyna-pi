@@ -110,7 +110,7 @@ def test_other_other():
     """
 
     def check(p):
-        d = (p+D).fc(1000)
+        d = (p+D).fc(max_iter=1000)
         sol = d.user_query('a')
         sol.assert_equal('a += 4.')
 

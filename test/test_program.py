@@ -700,7 +700,7 @@ def test_step():
     """)
     p.fc(max_iter=20).assert_equal("a(X) += 2.0.")
     p.fc(max_iter=3).assert_equal("a(X) += 1.75.")
-    p.fc(None).assert_equal("a(X) += 2.")
+    p.fc(max_iter=None).assert_equal("a(X) += 2.")
 
 
 # XXX: Experimental feature
