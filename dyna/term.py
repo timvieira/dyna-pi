@@ -582,7 +582,7 @@ def generalizer(t1, t2, s1=Ellipsis, s2=Ellipsis):
             if x in s1:
                 return s1[x]
             if y in s2:
-                return s2[x]
+                return s2[y]
 
             z = Var()
             s1[x] = z

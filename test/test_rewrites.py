@@ -95,9 +95,15 @@ def test_anti_unifier():
 
         have = rewrites.anti_unifier(r, s)
 
-        print('have:', have)
-        print('want:', want)
-        assert want.same(want)
+        if have.same(want):
+            print(colors.mark(True), want)
+        else:
+            print(colors.mark(False), 'failed')
+            print('have:', have)
+            print('want:', want)
+            test.fail += 1
+
+    test.fail = 0
 
 
     test(
@@ -129,6 +135,8 @@ def test_anti_unifier():
         "p([Y1,Y2,Y3|Ys]) :- k(Y1), k(Y2), k(Y3), ks(Ys).",
         "p(Zs) :- ks(Zs).",
     )
+
+    assert test.fail == 0
 
 
 def test_basic_covers():
