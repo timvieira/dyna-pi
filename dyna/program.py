@@ -753,12 +753,20 @@ class Program:
             ordered = []
             ys = list(ys)
             while ys:
+                def stage(a):
+                    # 0: inputs/constants (binders) — fire first to bind vars
+                    # 1: intensional (demanded subgoals) — defer for range-restriction (load-bearing for pass-1 termination)
+                    # 2: builtins — most deferred; need their inputs ground
+                    if self.is_builtin(a): return 2
+                    if not self.is_exogenous(a): return 1
+                    return 0
                 def key(a):
                     av = vars(a); new = av - bound
                     return (bool(new),                                 # filters (no new vars) first
-                            self.is_builtin(a),                        # then chart-queryable; builtins last (need ground)
+                            stage(a),                                  # binders → intensional → builtins
                             not (av & bound) and bool(bound),          # then connected
-                            len(new))                                  # most selective
+                            len(new),                                  # most selective
+                            str(a))                                    # canonical tiebreak — source-order independent
                 a = min(ys, key=key)
                 ys.remove(a)
                 ordered.append(a)
@@ -781,7 +789,7 @@ class Program:
         tp.magic_fn = magic_fn
         return tp
 
-    def scc_solver(self, solver=1, *, magic=False, data='', budget=None):
+    def scc_solver(self, *, solver=1, magic=False, data='', budget=None):
         """Goal-directed, two-pass evaluator.
 
         Pass 1 runs in the Boolean semiring to build an SCC toposort index
