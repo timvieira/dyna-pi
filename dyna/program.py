@@ -745,33 +745,114 @@ class Program:
             old = new
         return new
 
-    def scc_solver(self, solver=1):
-        # Run forward chaining in the Boolean semiring to approximate the set of hyperedges in P(D).
-        scc = self._sccs_by_boolean_pass(solver=solver)
-        solver = (self.solver if solver == 1 else self.solver2)(priority=lambda i: scc.get(i), AgendaType=BucketQueue)
-        return solver()
+    def magic_templates(self):
+        "Textbook magic templates, output-directed, on the Boolean semiring."
+        def ordering_heuristics(ys, bound):
+            "Order body atoms greedily: bind early, demand late."
+            bound = set(bound)
+            ordered = []
+            ys = list(ys)
+            while ys:
+                def key(a):
+                    av = vars(a); new = av - bound
+                    return (bool(new),                                 # filters (no new vars) first
+                            self.is_builtin(a),                        # then chart-queryable; builtins last (need ground)
+                            not (av & bound) and bool(bound),          # then connected
+                            len(new))                                  # most selective
+                a = min(ys, key=key)
+                ys.remove(a)
+                ordered.append(a)
+                bound |= vars(a)
+            return ordered
 
-    def _sccs_by_boolean_pass(self, solver):
-        "Return a map from items to their toposorted SCC index."
+        magic_fn = self.gen_functor('$magic')
+        def magic(t): return Term(magic_fn, t)
+
+        rules = [Rule(magic(r.head), *ordering_heuristics(r.body, set())) for r in self.outputs]
+        for r in self.rules:
+            gH = magic(r.head)
+            ordered = ordering_heuristics(r.body, vars(r.head))
+            rules.append(Rule(r.head, gH, *ordered))                   # guarded answer
+            for j, f in enumerate(ordered):                            # demand each idb subgoal
+                if not self.is_exogenous(f):
+                    rules.append(Rule(magic(f), gH, *ordered[:j]))     # SIPS prefix only
+
+        tp = TransformedProgram('magic', self, rules)
+        tp.magic_fn = magic_fn
+        return tp
+
+    def scc_solver(self, solver=1, *, magic=False, data='', budget=None):
+        """Goal-directed, two-pass evaluator.
+
+        Pass 1 runs in the Boolean semiring to build an SCC toposort index
+        over the output-reachable, derivable hyperedges; pass 2 runs in the
+        program's semiring with that index as a `BucketQueue` priority, so
+        cyclical subprograms converge before "later" subprograms are pulled.
+
+        With `magic=True`, pass 1 runs on the magic-templates transformation,
+        so the index is sound on demand-bounded programs whose bare Boolean
+        pass would diverge. Pass-1 interruption is surfaced on the returned
+        solver as `.pass1_interrupted`.
+
+        `budget` is applied per pass — passing `budget=t` means each pass
+        gets up to `t` seconds, not `t` shared between them.
+        """
+        if not isinstance(data, Program):
+            data = Program(data, semiring=self.Semiring)
+
+        p = self.linearize()
+
+        bound_program = p.magic_templates() if magic else p
+
+        solver = Program.solver if solver == 1 else Program.solver2
+
+        s1 = solver((bound_program + data).booleanize())
+        s1(budget=budget, throw=False)
 
         def deps(x):
-            "Lazily materialize dependency graph; keeps space complexity linear in the number of nonzero items."
-            for r in solver.program:
-                r = fresh(r)
-                for _ in unify(r.head, x):
-                    for _ in solver.ground_out_rule(r):
-                        for k in range(len(r.body)):
-                            yield canonicalize(r.body[k])
+            # Materialize so that lookup's unify scopes close before tarjan
+            # reads the result — otherwise transitive bindings on `x` mutate
+            # tarjan's dict-key hash mid-walk.
+            out = []
+            for r in s1.program.lookup(x):
+                for _ in s1.ground_out_rule(r):
+                    for b in r.body:
+                        if not s1.program.is_exogenous(b):
+                            out.append(canonicalize(b))
+            return out
 
-        p = self
-        BP = p.booleanize()
+        outputs = []
+        for o in p.outputs:
+            for _ in s1.ground_out_rule(o):
+                outputs.append(canonicalize(o.head))
+        scc = {x: i for i, xs in enumerate(tarjan(deps, outputs)) for x in xs}
 
-        solver = BP.solver() if solver == 1 else BP.solver2()
-        B = solver().sol()
-        outputs = [r.head for r in B if self.is_output(r.head)]
-        t = tarjan(deps, outputs)
-        mapping = {x: i for i, xs in enumerate(t) for x in xs}
-        return mapping
+        # Direct map for the common case (canonical-key match); falls
+        # back to a functor-indexed `Program` with unify-based lookup
+        # for nonground producers. Bucket offset by +1 so a real bucket
+        # is never the semiring zero.
+        support_map = {k: i + 1 for k, i in scc.items()}
+        support = Program([Rule(k, i + 1) for k, i in scc.items()])
+
+        s2 = solver(p + data, AgendaType=BucketQueue)
+
+        def priority(it):
+            if not isinstance(it, Term) or p.is_exogenous(it):
+                return 0
+            hit = support_map.get(it)
+            if hit is not None:
+                return hit
+            it = fresh(it)  # support.lookup may bind vars; protect caller's term
+            best = None
+            for r in support.lookup(it):
+                v = r.body[0] if r.body else 0
+                best = v if best is None else min(best, v)
+            return best
+
+        s2.priority = priority
+        s2(budget=budget, throw=False)
+        s2.pass1_interrupted = s1.interrupted
+        return s2
 
     def agenda(self, *, precision=6, max_iter=np.inf):
         "Agenda-based semi-naive evaluation"
