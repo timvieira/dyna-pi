@@ -170,7 +170,7 @@ def test_data_arg(magic):
     # or a Program.
     p = Program("""
     goal += f(X).
-    """, '', 'goal.')
+    """, 'f(X).', 'goal.')
 
     d = p.scc_solver(solver=2, magic=magic, data="""
     f(1) += 2.
@@ -245,9 +245,8 @@ def test_bodied_output_seed_unification():
     # A bodied output `goal(X) :- X = 5` should restrict the magic seed
     # to that single binding, so only `goal(5)` enters the chart even
     # though `goal(3)` and `goal(7)` are ground facts in the program.
-    from dyna import syntax
 
-    outputs = Program(list(syntax.parser('goal(X) :- X = 5.')))
+    outputs = Program('goal(X) :- X = 5.')
     p = Program("""
     goal(3) += 1.
     goal(5) += 1.
@@ -265,9 +264,8 @@ def test_bodied_output_seed_input_binder():
     # the seed body is range-restricted by the input data, so only the
     # demanded `goal(_)` items are computed. This is the canonical use
     # case: client-specified queries (`want`) filter what gets derived.
-    from dyna import syntax
 
-    outputs = Program(list(syntax.parser('goal(X) :- want(X).')))
+    outputs = Program('goal(X) :- want(X).')
     p = Program("""
     goal(0) += 1.
     goal(1) += 1.
@@ -289,18 +287,17 @@ def test_bodied_output_finite_range():
     # input restricts demand to the finite client-supplied range.
     # Items in `h` outside that range (15, 20) are never demanded and
     # so never enter the chart.
-    from dyna import syntax
 
-    outputs = Program(list(syntax.parser('goal(X) :- myrange(X).')))
+    outputs = Program('goal(X) :- myrange(X).')
     p = Program("""
     h(0) += 1.
     h(5) += 1.
     h(10) += 1.
     h(15) += 1.
     h(20) += 1.
-    goal(X) += h(X).
-    inputs: myrange(_).
-    """, '', outputs)
+    goal(X) += h(X).   % Note: h(X) is intentionally dead
+
+    """, 'myrange(X).', outputs)
 
     d = p.scc_solver(solver=2, magic=True,
                      data='myrange(0) += 1. myrange(5) += 1. myrange(10) += 1.')
@@ -320,10 +317,9 @@ def test_bodied_output_finite_range():
 def test_bodied_output_seed_structurally_preserved():
     # Structural check: the body of an output declaration appears
     # verbatim in the magic seed rule (modulo SIPS reordering).
-    from dyna import syntax
 
-    outputs = Program(list(syntax.parser('goal(X) :- want(X).')))
-    p = Program("goal(X) += 1. inputs: want(_).", '', outputs)
+    outputs = Program('goal(X) :- want(X).')
+    p = Program("goal(X) += 1.", 'want(_).', outputs)
     mt = p.magic_templates()
 
     [seed] = [r for r in mt.rules
