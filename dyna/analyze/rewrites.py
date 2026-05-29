@@ -4,8 +4,6 @@ Implementation of the rewrite-based simple type system.
 from arsenal import colors
 from itertools import combinations
 
-from semirings import Boolean
-
 from dyna.pretty import PrettyPrinter
 from dyna.term import Term, fresh, vars, Subst, is_var, generalizer, deref, MostGeneralSet
 from dyna.program import Program, Rule
@@ -79,10 +77,10 @@ class Rewrites:
 
         drop = set(cp.checked) if drop_checked else set()
 
-        # The issue we have with intersection (i.e., the reason why we have 
-        # ALLOW_FREE_MERGE=False) is that we actually do truly have intersection (subsumption 
+        # The issue we have with intersection (i.e., the reason why we have
+        # ALLOW_FREE_MERGE=False) is that we actually do truly have intersection (subsumption
         # actually) when we have a free variable.  It really is the case that f(X:free) is a
-        # superset of f(X:int) and everything else!  So the behavior is correct.  The problem 
+        # superset of f(X:int) and everything else!  So the behavior is correct.  The problem
         # is that we are being sneaky with the not merging these free things.
         if USE_INSTS:
 
@@ -207,7 +205,6 @@ class Rewrites:
             else:
                 return p.spawn(tmp)
 
-    # TODO: If r ⊇ s then the anti-unifier should be equivalent to r
     def anti_unifier(self, r, s):
         "Return a simple type `t` such that `t ⊇ r and t ⊇ s` if `r` and `s` might overlap."
 
@@ -215,49 +212,50 @@ class Rewrites:
         s = fresh(s)
 
         new_head = generalizer(r.head, s.head)
+        head_vars = vars(new_head)
 
-        # substitution constraints
-        r_subst = scons(Subst().mgu(r.head, new_head))
-        s_subst = scons(Subst().mgu(s.head, new_head))
+        # Propagate each body onto the shared generalized head.
+        R = self.cp({*r.body, *scons(Subst().mgu(r.head, new_head))})
+        S = self.cp({*s.body, *scons(Subst().mgu(s.head, new_head))})
 
-        R = self.cp({*r.body, *r_subst})
-        checked = set(self.cp.checked)
-
-        S = self.cp({*s.body, *s_subst})
-        checked |= set(self.cp.checked)
-
-        if S is None: return r
+        # If either side is unsatisfiable then it contributes no constraints to
+        # the overlap, so the other side covers it.
         if R is None: return s
+        if S is None: return r
 
-        [T] = Program([Rule(new_head, *(set(S) & set(R)))], semiring=Boolean).snap_unifications()
+        # Candidates are the propagated constraints expressed purely over the
+        # generalized head's variables.  A candidate belongs in the anti-unifier
+        # iff it is entailed by *both* r and s.  We test entailment with
+        # `covers` rather than by intersecting the two charts directly: the
+        # latter matches constraints by exact term equality and so drops a
+        # constraint such as r's `ks(Xs)` whenever s states the equivalent fact
+        # in a different shape (e.g. `k(Y2), ks(Ys)` for the tail `[Y2|Ys]`).
+        # Because every constraint of r passes this test when r ⊇ s, the result
+        # is then equivalent to r (and symmetrically for s ⊇ r).
+        candidates = {
+            x for x in set(R) | set(S)
+            if isinstance(x, Term)
+            and x.fn not in {'=', '$bound', '$free'}
+            and len(vars(x)) > 0         # drop ground, existential constraints (i.e., assume they succeed)
+            and vars(x) <= head_vars     # keep only head-connected constraints
+        }
 
-        TT = Rule(T.head, *{
-            x for x in T.body
-            if vars(x) <= vars(T.head)   # drop existentially quantified constraints
-            and len(vars(x)) > 0         # drop constraints that have no variables (they didn't fail, so assume they are true)
-            and x not in checked         # already checked
-            and not (isinstance(x, Boolean) and x.score)
-        })
+        body = {
+            A for A in candidates
+            if self.covers(Rule(new_head, A), r) and self.covers(Rule(new_head, A), s)
+        }
+
+        t = Rule(new_head, *body)
 
         if DEBUG > 2:
-
             print = PrettyPrinter().print
             print()
             print(colors.orange % '= ANTI-UNIFIER ====')
             print('r=', r)
             print('s=', s)
-            for x in set(S) - set(R):
-                print('  ', colors.light.red % 's-r:', x)
-            for x in set(S) & set(R):
-                print('  ', colors.mark(True), x)
-            for x in set(R) - set(S):
-                print('  ', colors.light.red % 'r-s:', x)
+            for A in candidates:
+                kept = A in body
+                print('  ', colors.mark(kept), A)
+            print(colors.orange % 'FINAL', t)
 
-            #print('new head:', new_head)
-            #print('subst:', subst)
-            print('t=', colors.render(colors.orange % T))
-            print('checked:', checked)
-
-            print(colors.orange % 'FINAL', TT)
-
-        return TT
+        return t

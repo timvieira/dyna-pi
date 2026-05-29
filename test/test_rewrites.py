@@ -119,19 +119,19 @@ def test_anti_unifier():
     )
 
     test(
-        "p([X1,X2|Ys]) :- k(X1), k(X2), ks(Xs).",
+        "p([X1,X2|Xs]) :- k(X1), k(X2), ks(Xs).",
         "p([Y1,Y2,Y3|Ys]) :- k(Y1), k(Y2), k(Y3), ks(Ys).",
         "p([Z1,Z2|Zs]) :- k(Z1), k(Z2), ks(Zs).",
     )
 
     test(
-        "p([X1|Ys]) :- k(X), ks(Xs).",
+        "p([X1|Xs]) :- k(X1), ks(Xs).",
         "p([Y1,Y2,Y3|Ys]) :- k(Y1), k(Y2), k(Y3), ks(Ys).",
-        "p([Z1|Zs]) :- k(Z), ks(Zs).",
+        "p([Z1|Zs]) :- k(Z1), ks(Zs).",
     )
 
     test(
-        "p(Ys) :- ks(Xs).",
+        "p(Xs) :- ks(Xs).",
         "p([Y1,Y2,Y3|Ys]) :- k(Y1), k(Y2), k(Y3), ks(Ys).",
         "p(Zs) :- ks(Zs).",
     )
