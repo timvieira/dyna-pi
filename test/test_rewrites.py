@@ -136,6 +136,41 @@ def test_anti_unifier():
         "p(Zs) :- ks(Zs).",
     )
 
+    # symmetry: when s ⊇ r the result is equivalent to s (the more general one)
+    test(
+        "p([Y1,Y2|Ys]) :- k(Y1), k(Y2), ks(Ys).",
+        "p([X|Xs]) :- k(X), ks(Xs).",
+        "p([Z|Zs]) :- k(Z), ks(Zs).",
+    )
+
+    # anti-unifying a rule with itself returns an equivalent rule
+    test(
+        "p([X|Xs]) :- k(X), ks(Xs).",
+        "p([X|Xs]) :- k(X), ks(Xs).",
+        "p([Z|Zs]) :- k(Z), ks(Zs).",
+    )
+
+    # distinct constants in the head generalize to a variable; shared tail kept
+    test(
+        "p([0|Xs]) :- ks(Xs).",
+        "p([1|Ys]) :- ks(Ys).",
+        "p([Z|Zs]) :- ks(Zs).",
+    )
+
+    # different list lengths: [X] vs [X1,X2]; the tail is still a ks-list
+    test(
+        "p([X]) :- k(X).",
+        "p([X1,X2]) :- k(X1), k(X2).",
+        "p([Z|Zs]) :- k(Z), ks(Zs).",
+    )
+
+    # a constraint present on only one side (the head k) is dropped
+    test(
+        "p([X|Xs]) :- k(X), ks(Xs).",
+        "p([Y|Ys]) :- ks(Ys).",
+        "p([Z|Zs]) :- ks(Zs).",
+    )
+
     assert test.fail == 0
 
 
