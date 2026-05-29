@@ -747,26 +747,32 @@ class Program:
 
     def magic_templates(self):
         "Textbook magic templates, output-directed, on the Boolean semiring."
-        def ordering_heuristics(ys, bound):
+        # Identify leaves of the coarse depdency graph for use in the ordering heuristic
+        cg = self._coarse_graph()
+        def is_leaf(a):
+            a = snap(a)
+            if not isinstance(a, Term): return False
+            return all(not cg.g.outgoing[root] for root in cg.nodes.roots(a))
+
+        def reorder(ys, bound):
             "Order body atoms greedily: bind early, demand late."
             bound = set(bound)
             ordered = []
             ys = list(ys)
             while ys:
                 def stage(a):
-                    # 0: inputs/constants (binders) — fire first to bind vars
+                    # 0: exogenous / dep-graph leaves (binders) — fire first to bind vars
                     # 1: intensional (demanded subgoals) — defer for range-restriction (load-bearing for pass-1 termination)
                     # 2: builtins — most deferred; need their inputs ground
                     if self.is_builtin(a): return 2
-                    if not self.is_exogenous(a): return 1
+                    if not (self.is_exogenous(a) or is_leaf(a)): return 1
                     return 0
                 def key(a):
                     av = vars(a); new = av - bound
                     return (bool(new),                                 # filters (no new vars) first
                             stage(a),                                  # binders → intensional → builtins
                             not (av & bound) and bool(bound),          # then connected
-                            len(new),                                  # most selective
-                            str(a))                                    # canonical tiebreak — source-order independent
+                            len(new))                                  # most selective
                 a = min(ys, key=key)
                 ys.remove(a)
                 ordered.append(a)
@@ -776,13 +782,13 @@ class Program:
         magic_fn = self.gen_functor('$magic')
         def magic(t): return Term(magic_fn, t)
 
-        rules = [Rule(magic(r.head), *ordering_heuristics(r.body, set())) for r in self.outputs]
+        rules = [Rule(magic(r.head), *reorder(r.body, set())) for r in self.outputs]
         for r in self.rules:
             gH = magic(r.head)
-            ordered = ordering_heuristics(r.body, vars(r.head))
+            ordered = reorder(r.body, vars(r.head))
             rules.append(Rule(r.head, gH, *ordered))                   # guarded answer
             for j, f in enumerate(ordered):                            # demand each idb subgoal
-                if not self.is_exogenous(f):
+                if not self.is_exogenous(f):                           # facts are guarded too, so still demand them
                     rules.append(Rule(magic(f), gH, *ordered[:j]))     # SIPS prefix only
 
         tp = TransformedProgram('magic', self, rules).prune_fast()

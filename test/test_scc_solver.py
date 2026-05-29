@@ -330,6 +330,25 @@ def test_bodied_output_seed_structurally_preserved():
         f'output body atom should appear in magic seed; got {list(seed.body)}'
 
 
+@pytest.mark.parametrize('pred', ['f', 'score'])
+def test_magic_termination_name_independent(pred):
+    # Regression: magic-set demand termination must not depend on the
+    # recursive predicate's *spelling*. This list-fold with an undeclared
+    # `input`/`w` once diverged for some names (e.g. `f`) and terminated for
+    # others (e.g. `score`) because the SIPS body ordering tied on every
+    # criterion except the canonical `str(a)` tiebreak, which sorts on the
+    # predicate name. Dep-graph leaves (predicates that demand nothing, here the
+    # fact-defined `input`/`w`) are now ordered as binders, range-restricting
+    # the demand for *every* name.
+    rules = (f'{pred}([]) += 1. {pred}([A|S]) += w(A) * {pred}(S). '
+             f'goal += {pred}(W) * input(W).')
+    data = 'input([a,b]). w(a) += 2. w(b) += 3.'
+
+    d = Program(rules + ' ' + data, '', 'goal.').scc_solver(solver=2, magic=True)
+    assert not getattr(d, 'pass1_interrupted', False)
+    d.user_query('goal').assert_equal("goal += 6.")
+
+
 if __name__ == '__main__':
     from arsenal.testing_framework import testing_framework
     testing_framework(globals())
