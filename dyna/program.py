@@ -785,11 +785,11 @@ class Program:
                 if not self.is_exogenous(f):
                     rules.append(Rule(magic(f), gH, *ordered[:j]))     # SIPS prefix only
 
-        tp = TransformedProgram('magic', self, rules)
+        tp = TransformedProgram('magic', self, rules).prune_fast()
         tp.magic_fn = magic_fn
         return tp
 
-    def scc_solver(self, *, solver=1, magic=False, data='', budget=None):
+    def scc_solver(self, *, solver=2, magic=False, data='', budget=None):
         """Goal-directed, two-pass evaluator.
 
         Pass 1 runs in the Boolean semiring to build an SCC toposort index
