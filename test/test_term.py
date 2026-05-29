@@ -235,6 +235,15 @@ def test_unify():
     y = q(Z, Z)
     test(x, y)
 
+    # Subst.mgu unifies tuples element-wise (used internally to unify a term's
+    # fargs).  Tuples of unequal length do not unify.
+    s = Subst().mgu((X, Y, 5), (Y, X, X))
+    assert s is not Subst.FAIL
+    assert s(X) == 5 and s(Y) == 5
+
+    assert Subst().mgu((X, Y), (1, 2, 3)) is Subst.FAIL
+    assert Subst().mgu((X, 2), (1, 3)) is Subst.FAIL
+
 
 def test_occurs_check():
     f, g, h = map(functor, 'fgh')

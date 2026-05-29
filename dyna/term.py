@@ -451,9 +451,11 @@ class Subst(dict):
                 return self
         elif isinstance(y, Var):
             return self.mgu(y, x)       # pylint: disable=W1114
-        elif isinstance(x, Term) and isinstance(y, Term) and x.arity == y.arity:
+        elif isinstance(x, Term) and isinstance(y, Term):
+            return self.mgu(x.fargs, y.fargs)
+        elif isinstance(x, tuple) and isinstance(y, tuple) and len(x) == len(y):
             s = self
-            for a, b in zip(x.fargs, y.fargs):
+            for a, b in zip(x, y):
                 s = s.mgu(a, b)
                 if s is FAIL: return FAIL
             return s
