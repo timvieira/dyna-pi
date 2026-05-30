@@ -11,7 +11,7 @@ from semirings import base, Float
 
 from dyna.builtin import Builtins, BuiltinConstaint, NotMatchesConstaint
 from dyna import syntax
-from dyna.pretty import PrettyPrinter, pp
+from dyna.pretty import PrettyPrinter, pp, Escape
 from dyna.rule import Rule, is_const
 from dyna.term import (
     fresh, Var, unify, snap, Term, unifies, vars, covers, gen_functor,
@@ -216,14 +216,92 @@ class Program:
 #        return output
 
 
+    # CSS color for input subgoals highlighted inline in rule bodies.  Inputs
+    # are exogenous (see `is_exogenous`), so a distinct purple sets them apart
+    # from local items (default), variables (green), and the aggregator (blue).
+    html_input_color = '<span style="color: #7b2fbe;">%s</span>'
+
+    # Class-level switch controlling whether `_repr_html_` (the representation
+    # Jupyter renders automatically) folds in the input/output declarations.
+    # Set `Program.show_types_in_html = False` to suppress them globally, or
+    # call `p.to_html(types=False)` for a one-off.
+    show_types_in_html = True
+
     def _repr_html_(self):
+        return self.to_html(types=self.show_types_in_html)
+
+    def to_html(self, types=True):
+        """Render the program as HTML.
+
+        Input subgoals are highlighted inline in the rule bodies (see
+        `html_input_color`).  When `types` is true and the program carries input
+        and/or output declarations, those are appended in a single collapsible
+        `<details>` block (collapsed by default, so it stays out of the way until
+        expanded).  Because `inputs`/`outputs` are themselves `Program`s -- which
+        may carry rule bodies, delayed constraints, and even their own
+        declarations -- each is rendered by recursing into this same method, so
+        arbitrarily general declaration programs display correctly.
+        """
+        html = self._html_code_block()
+        if types and (self.inputs or self.outputs):
+            html += self._html_types_section()
+        return html
+
+    def _highlight_inputs(self, r):
+        """Return a copy of rule `r` whose input subgoals are colored.
+
+        The functor is wrapped in an `Escape` (which `pp` emits verbatim) so the
+        arguments still pretty-print normally; arity-0 subgoals are emitted as a
+        bare `Escape` to avoid a spurious `foo()`.  Returns `r` unchanged when it
+        has no input subgoals.
+        """
+        if self.inputs is None: return r
+        body, changed = [], False
+        for y in r.body:
+            if isinstance(y, Term) and self.is_input(y):
+                changed = True
+                colored = self.html_input_color % str(snap(y.fn))
+                body.append(Term(Escape(colored), *y.args) if y.args else Escape(colored))
+            else:
+                body.append(y)
+        return Rule(r.head, *body) if changed else r
+
+    def _html_code_block(self):
+        "The line-numbered, syntax-colored block of rules, inputs highlighted."
+        if len(self) == 0:
+            return (
+                '<div style="font-family: monospace; border: 1px solid #eee;'
+                ' font-size: 14px; padding: 5px; color: #999;">(no rules)</div>'
+            )
         linenums = '<br>'.join(map(str, range(len(self))))
-        code = '<br/>'.join(pp(r, color='html') + '<span style="color: blue;">.</span>' for r in self)
+        code = '<br/>'.join(pp(self._highlight_inputs(r), color='html')
+                            + '<span style="color: blue;">.</span>' for r in self)
         return f"""\
 <div style="display: flex; font-family: monospace; border: 1px solid #eee; font-size: 14px !important; text-align: left !important; overflow-x: auto;">\
 <div style="line-height: 1.5em; margin: 0; padding: 5px; text-align: right; user-select: none; padding-right: 10px; color: #b3777f; border-right: 1px solid #eee; margin-right: 10px;">{linenums}</div>\
 <pre style="line-height: 1.5em; margin: 0; padding: 5px; overflow-x: auto; white-space: nowrap;">\
 {code}</pre></div>\
+"""
+
+    def _html_types_section(self):
+        """A single collapsed `<details>` holding the input/output declarations.
+
+        Each declaration program is rendered by recursing into `to_html`, so the
+        general case -- rule bodies, delayed constraints, nested declarations --
+        displays correctly to arbitrary depth.
+        """
+        parts = []
+        for label, prog in [('inputs', self.inputs), ('outputs', self.outputs)]:
+            if not prog: continue
+            parts.append(
+                f'<div style="color: #7b2fbe; padding: 3px 0;">{label}:</div>'
+                f'{prog.to_html(types=True)}'
+            )
+        return f"""\
+<details style="font-family: monospace; font-size: 14px; border: 1px solid #eee; border-top: none;">\
+<summary style="cursor: pointer; padding: 5px; color: #b3777f; background: #fafafa; user-select: none;">\
+input/output declarations</summary>\
+<div style="padding: 5px;">{''.join(parts)}</div></details>\
 """
 
     #___________________________________________________________________________

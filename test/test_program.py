@@ -34,6 +34,65 @@ def test_program_repr_html():
     p.draw()
 
 
+def test_program_repr_html_types():
+    # `edge` is an arity-0 input: it must NOT render as `edge()` once highlighted.
+    p = Program("""
+    goal += word(X,I,K) * length(K) * edge.
+
+    inputs: word(_,_,_); length(_); edge.
+    output: goal.
+    """)
+    html = p._repr_html_()
+
+    # input/output declarations folded into a single collapsible block
+    assert '<details' in html
+    assert 'input/output declarations' in html
+
+    # input subgoals highlighted inline, arity-0 input has no spurious parens
+    assert Program.html_input_color % 'word' in html
+    assert Program.html_input_color % 'edge' in html
+    assert 'edge()' not in html
+
+    # `types=False` keeps inline highlighting but drops the declarations block
+    bare = p.to_html(types=False)
+    assert '<details' not in bare
+    assert Program.html_input_color % 'word' in bare
+
+    # a program with no declarations is unchanged (no block, no highlighting)
+    q = Program('a += b * c.')
+    qhtml = q._repr_html_()
+    assert '<details' not in qhtml
+    assert '#7b2fbe' not in qhtml
+
+
+def test_program_repr_html_general_input_program():
+    # The input type is a full program (rule bodies), and it carries its *own*
+    # `inputs:` declaration -- so rendering must recurse and nest a `<details>`
+    # inside the outer one.
+    p = Program("""
+    goal += rewrite(X,Y,Z) * word(W,I,K).
+    """,
+    inputs="""
+    word(X,I,K) :- w(X), n(I), n(K).
+    rewrite(X,Y,Z) :- k(X), k(Y), k(Z).
+    length(I) :- n(I).
+    inputs: k(_); n(_); w(_).
+    """)
+
+    # the input type really is a non-trivial program with its own declarations
+    assert len(p.inputs) == 3
+    assert p.inputs.inputs is not None
+
+    html = p._repr_html_()
+
+    # the input program's rule bodies are rendered (not just the heads)
+    assert '>word</span>' in html and '>w</span>' in html and '>n</span>' in html
+
+    # nesting: the outer declarations block plus the inner one for the input
+    # program's own inputs
+    assert html.count('<details') >= 2
+
+
 def chain_of_cycles(T, a=0.9):
     return Program(
         f'output: x{T}.'
