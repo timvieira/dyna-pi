@@ -87,6 +87,9 @@ def _subgoal_sort_key(x):
 
 
 class Program:
+
+    parent = None   # root programs have no parent; TransformedProgram sets it per-instance
+
     def __init__(self, rules='', inputs=None, outputs=None, semiring=None, has_builtins=True):
         if isinstance(rules, str):
             try:
@@ -1630,6 +1633,7 @@ input/output declarations</summary>\
     @to_collection
     def megafolds(self, *args, **kwargs):
         "Enumerate safe megafolds"
+        # pylint: disable=no-member  # @to_collection returns a ProgramCollection, but @wraps hides it from astroid
         return self.partial_megafolds(*args, **kwargs).filter(lambda x: x.safe_by_smt)
 
     @to_collection
@@ -2071,14 +2075,14 @@ input/output declarations</summary>\
     # XXX: this method has a subtle bug: in order to have a coherent bijection, we
     # require a canoncial path between derivations - we cannot mix and match which
     # derivations are mapping on a call-by-call basis!  This should be an easy fix.
-    def Transform(source, d, target):
+    def Transform(self, d, target):
         """
         Derivation mapping. This method will compose derivation mappings in a
         network of strongly equivalent programs
         """
 
         if isinstance(d, (tuple, list)):
-            return d.__class__([source.Transform(y, target) for y in d])
+            return d.__class__([self.Transform(y, target) for y in d])
 
         if derivations.Derivation.base(d): return d
         source = d.p

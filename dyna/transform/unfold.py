@@ -1,5 +1,5 @@
 from dyna import (
-    fresh, vars, TransformedProgram, Rule, Derivation, Product
+    fresh, vars, TransformedProgram, Rule, Derivation, Product, Constant
 )
 from functools import cached_property
 

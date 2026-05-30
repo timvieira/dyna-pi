@@ -5,7 +5,7 @@ Built-in relations.
 import numpy as np
 from dyna.term import (
     unify, Var, Term, unifies, deref, snap, fresh, covers, is_var, Product,
-    canonicalize
+    canonicalize, same
 )
 from dyna.rule import Rule
 from dyna.exceptions import InstFault

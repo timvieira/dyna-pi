@@ -140,7 +140,7 @@ class Slash(TransformedProgram):
 
     def tidy(self, **kwargs):
         # Check that the slashed based case is indeed the first rule.
-        assert self.rules[0].head.fn == self.slash_fn, p
+        assert self.rules[0].head.fn == self.slash_fn, self
         return self.elim_p(0, **kwargs)
 
     def transform(self, d):

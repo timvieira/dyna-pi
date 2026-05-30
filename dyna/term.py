@@ -176,13 +176,15 @@ class Product(tuple):
         if len(self) == 0:
             yield Product()
             return
-        if isinstance(self[0],Term) and self[0].fn == '=':
-            [_,a,b] = self[0]
+        x0 = self[0]
+        # pylint: disable=no-member  # Product.__getitem__ union defeats isinstance narrowing
+        if isinstance(x0, Term) and x0.fn == '=':
+            [_,a,b] = x0
             for _ in unify(a,b):
                 yield from self[1:].snap_unifications()
         else:
             for ys in self[1:].snap_unifications():
-                yield self[0] * ys
+                yield x0 * ys
 
     def covers(self, ys, s=Ellipsis):
         """

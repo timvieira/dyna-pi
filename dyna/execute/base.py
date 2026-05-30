@@ -9,6 +9,9 @@ tupleone = Product()
 
 class BaseSolver:
 
+    chart = None    # populated by subclasses (Solver in solver.py / solver2.py)
+    debug = False
+
     def __init__(self, program, tol=1e-8):
         #assert isinstance(program, Program), program
 
@@ -41,6 +44,10 @@ class BaseSolver:
         return result
 
     def lookup_vals(self, q):
+        raise NotImplementedError()
+
+    def update(self, item, Δ):
+        "Accumulate `Δ` into `item`'s chart entry; implemented by subclasses."
         raise NotImplementedError()
 
     def sol(self):

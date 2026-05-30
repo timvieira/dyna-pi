@@ -1,6 +1,6 @@
 from itertools import product, combinations
 
-from dyna import Program, term, unifies
+from dyna import Program, term, unifies, unify, Rule
 from dyna.term import DisjointEstimate
 from dyna.util import Hypergraph, Graph
 
@@ -51,6 +51,7 @@ class CoarseGraph:
         Split the program into input-independent and input-dependent subprogram.
         """
 
+        p = self.program
         g = self.g
         T = g.transitive_closure(reflexive=True)
 
@@ -79,6 +80,7 @@ class CoarseGraph:
         """
         Split the program into a sequence of strongly connected subprograms.
         """
+        p = self.program
         g = self.g
         C = g.condensation(roots=[x for x in g.nodes if p.is_output(x)])
         for i, xs in enumerate(C.topo):
@@ -107,6 +109,7 @@ class CoarseGraph:
         itself).  Non-expansive programs can be solved in finite time with
         Newton's method.
         """
+        p = self.program
         g = self.g
         T = g.transitive_closure(reflexive=True)
         for r in p:

@@ -170,7 +170,7 @@ class Parser:
         try:
             return self.parser.parse(src)
         except LarkError as e:
-            raise DynaParserException('\n' + e.get_context(src))
+            raise DynaParserException('\n' + e.get_context(src))  # pylint: disable=no-member  # always an UnexpectedInput here
 
     def term(self, x, freshen=True):
         assert isinstance(x, str), f'got {type(x).__name__}: {x!r}'
@@ -289,9 +289,9 @@ class BinOp(Op):
         super().__init__(op=op, arity=2, priority=priority, evaluation=evaluation, callback=callback)
 
     def render(self, OP, i):
-        if self.assoc == L: l, r = i, i-1
-        if self.assoc == R: l, r = i-1, i
-        if self.assoc == N: l, r = i-1, i-1
+        if self.assoc == L:   l, r = i, i-1
+        elif self.assoc == R: l, r = i-1, i
+        else:                 l, r = i-1, i-1
         return f'?p{i}: p{l} {OP} p{r} -> {self.callback}  |  p{i-1} -> noop'
 
 

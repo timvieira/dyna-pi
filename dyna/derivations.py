@@ -16,6 +16,11 @@ from dyna import PrettyPrinter
 class Derivation(Rule):
     "Our representation of a derivation extends Rule; it adds some bookkeeping information"
 
+    # Several methods below (base, value, size, ...) deliberately name their first
+    # argument `d` rather than `self`: they read as tree-recursion functions and are
+    # invoked both as `Derivation.value(d)` and bound as `d.value()`.
+    # pylint: disable=no-self-argument
+
     def __init__(self, D, p, I):
 
         self.p = p
