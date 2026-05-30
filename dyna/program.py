@@ -179,6 +179,19 @@ class Program:
         if close_brace is not None: lines.append(close_brace)
         return sep.join(lines)
 
+    # TODO: this method ought to maintain the input/output annotations.
+    # TODO: this method needs a way to serialize semiring values
+    # TODO: this method needs to save its semiring
+    # TODO: I think our best bet is to use pickle for general serialization, rather than this DIY string representation,
+    # but the DIY string representation is fine for common cases, I suppose.
+    def plaintext(self):
+        lines = [f'{pp(r, color=False)}.' for r in self]
+        if self.inputs:
+            lines.append('input: ' + '; '.join(pp(x, color=False) for x in self.inputs) + '.')
+        if self.outputs:
+            lines.append('output: ' + '; '.join(pp(x, color=False) for x in self.outputs) + '.')
+        return '\n'.join(lines)
+
 #    def _repr_html_(self):
 #        return '<table>' + '\n'.join(f'<tr><td>{i}</td><td style="text-align: left; font-family: Monospace;">%s.</td></tr>' % pp(r) for i, r in enumerate(self)) + '</table>'
 
@@ -691,14 +704,26 @@ class Program:
     #___________________________________________________________________________
     # Inference
 
-    def __call__(self, data='', budget=None, throw=True, kill=False, solver=1, **kwargs):
+    def __call__(self, data='', budget=None, throw=True, kill=False, solver=None, **kwargs):
         assert not isinstance(data, Program) or self.Semiring == data.Semiring, \
             [self.semiring, data.semiring]
+        # Only pick a solver when the caller didn't.  solver1 is faster but
+        # cannot enumerate unbound head variables, so it is only safe on
+        # range-restricted programs; everything else needs solver2.
+        if solver is None:
+            solver = 1 if self.is_range_restricted() else 2
         s = self.solver(**kwargs) if solver == 1 else self.solver2(**kwargs)
         s(data, budget=budget, throw=throw, kill=kill)
         return s
 
-    # TODO: Solver.sol() and Program.solve() should probably be unified; same for __call__ probably
+    # TODO: Solver.sol() and Program.solve() should probably be unified; same
+    # for __call__ probably.
+    #
+    # TODO: this method (and __call__) need dispatching logic so that it is more
+    # likely to "do the right thing" on an arbitrary program.  Historically, it
+    # is the "best case solver" that only works on the most narrow set of
+    # programs (range-restricted, finite-support), but increasingly it has been
+    # a stumbling block for new users (mostly Claude, lol).
     def solve(self, *args, **kwargs):
         return self(*args, **kwargs).sol()
 
@@ -713,17 +738,28 @@ class Program:
         if isinstance(want, base.Semiring): want = Program([Rule(query, want)], semiring=type(want))
         self.user_query(query).assert_equal(want, **kwargs)
 
+    # TODO: add short docstring that indicates that this is a solver for
+    # linearly recursive programs
     def solve_linear(self):
         from dyna.execute.linear import kleene_linsolve
         return kleene_linsolve(self)
 
+    # TODO: add short docstring that indicates that this is a solver for
+    # range-restricted programs
     def solver(self, **kwargs):
         from dyna.execute.solver import Solver
         return Solver(self, **kwargs)
 
+    # TODO: add short docstring that indicates that this is a general solver
+    # that supports non-range-restricted programs, but no other forms of delayed
+    # constraints.
     def solver2(self, **kwargs):
         from dyna.execute.solver2 import Solver
         return Solver(self, **kwargs)
+
+    def is_range_restricted(self):
+        "True iff every variable in each rule's head also appears in its body."
+        return all(not (vars(r.head) - vars(r.body)) for r in self.rules)
 
     # TODO: add the precision option like agenda.
     def fc(self, *, max_iter=None, chart=None, verbose=False, proj=lambda p: p):
@@ -795,7 +831,7 @@ class Program:
         tp.magic_fn = magic_fn
         return tp
 
-    def scc_solver(self, *, solver=2, magic=False, data='', budget=None):
+    def scc_solver(self, *, solver=None, magic=False, data='', budget=None):
         """Goal-directed, two-pass evaluator.
 
         Pass 1 runs in the Boolean semiring to build an SCC toposort index
@@ -818,6 +854,12 @@ class Program:
 
         bound_program = p.magic_templates() if magic else p
 
+        # Only pick a solver when the caller didn't.  Pass 1's solver1 cannot
+        # enumerate unbound head variables, so it is only safe when the bound
+        # boolean program is range-restricted. (With `magic=True` the magic
+        # guard binds the head vars, keeping it range-restricted.)
+        if solver is None:
+            solver = 1 if bound_program.is_range_restricted() else 2
         solver = Program.solver if solver == 1 else Program.solver2
 
         s1 = solver((bound_program + data).booleanize())
@@ -1388,6 +1430,7 @@ class Program:
         from dyna.transform.unfold import Unfold
         return Unfold(self, i, j, **kwargs)
 
+    # TODO: add max_iters option
     def unfold_x(self, x, verbosity=0):
         """
         Unfold this program until all of the `x` items are gone.
