@@ -738,22 +738,18 @@ class Program:
         if isinstance(want, base.Semiring): want = Program([Rule(query, want)], semiring=type(want))
         self.user_query(query).assert_equal(want, **kwargs)
 
-    # TODO: add short docstring that indicates that this is a solver for
-    # linearly recursive programs
     def solve_linear(self):
+        "Linear solve for linearly recursive programs (Kleene)."
         from dyna.execute.linear import kleene_linsolve
         return kleene_linsolve(self)
 
-    # TODO: add short docstring that indicates that this is a solver for
-    # range-restricted programs
     def solver(self, **kwargs):
+        "Forward chaining for range-restricted, finite-support programs."
         from dyna.execute.solver import Solver
         return Solver(self, **kwargs)
 
-    # TODO: add short docstring that indicates that this is a general solver
-    # that supports non-range-restricted programs, but no other forms of delayed
-    # constraints.
     def solver2(self, **kwargs):
+        "Forward chaining for non-range-restricted programs (no other delayed constraints)."
         from dyna.execute.solver2 import Solver
         return Solver(self, **kwargs)
 
@@ -1678,8 +1674,12 @@ class Program:
     #___________________________________________________________________________
     # Program normalization
 
-    # TODO: write docstring
     def linearize(self, driver=None):
+        """
+        Split overlapping body subgoals into fresh copies so every rule is locally linear.
+        Note: this should not be confused with the type of linearization done in Newton's
+        algorithm or `solve_linear`.
+        """
         tmps = OrderedSet()
         for i, s in enumerate(self):
             #print('rule', s)
