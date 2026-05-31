@@ -97,7 +97,6 @@ class LinearRuleElimination(TransformedProgram):
                 # [2021-09-06 Mon] I believe that our linearization step is
                 # sufficient to avoid issues.
                 assert False, f'call linearize before elim! {program}\n\n{program.linearize()}'
-                pass
 
             if _r is s: continue
             new_program.append(r)

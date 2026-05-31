@@ -7,7 +7,7 @@ import numpy as np
 from ansi2html import Ansi2HTMLConverter
 from arsenal import colors
 from contextlib import contextmanager
-from distutils.spawn import find_executable
+import shutil
 from IPython.display import display, SVG, Image, HTML
 from path import Path
 
@@ -203,12 +203,12 @@ class latex:
                     r'([\\$~])',
                     lambda m: {
                         '\\': r'$\backslash$',
-                        '~': '$\sim$',
-                        '$': '\$',
+                        '~': r'$\sim$',
+                        '$': r'\$',
                        }[m.group(1)],
                     x
                 ),
-                lambda m: '{\color{magenta}%s}' % m.group(1)
+                lambda m: r'{\color{magenta}%s}' % m.group(1)
             )
             .replace('∂', r'$\partial$')
             .replace('⋅', r'${\cdot}$')
@@ -294,7 +294,7 @@ class tikz(latex):
 def run_cmd(cmd):
     assert isinstance(cmd, list)
 
-    if not find_executable(cmd[0]):
+    if not shutil.which(cmd[0]):
         raise Exception(f'The `{cmd[0]}` executable was not found - please make sure it is installed.')
 
     cmd = [str(x) for x in cmd]

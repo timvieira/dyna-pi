@@ -99,7 +99,7 @@ class pack_arrays:
         # determine the alphabet
         ix = Integerizer()
         for i,j in M:
-            ix(i), ix(j)
+            ix(i); ix(j)
         for i in V:
             ix(i)
 

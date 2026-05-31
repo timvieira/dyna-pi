@@ -167,7 +167,6 @@ def test_coarsen():
 
 def test_coarse_hypergraph():
     from dyna import canonicalize
-    from dyna.util import Hypergraph
 
     p = Program("""
     goal += h(I,I).

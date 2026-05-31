@@ -146,7 +146,7 @@ class Runtime:
 
     @cache
     def _suffixtime(self, suffix, C, V):
-        """
+        r"""
         Recursive function tells us the optimal "suffix runtime" for a rule when
         given an unordered set of subgoals have already been grounded \prefixset.
         Let $\mathcal{C}$ be the union of the constraints for subgoals in prefix.}

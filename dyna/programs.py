@@ -9,7 +9,7 @@ from collections import defaultdict
 from io import StringIO
 
 from dyna import Hypergraph
-from dyna.util import escape_str, graphviz, Edge, Hypergraph
+from dyna.util import escape_str, graphviz, Edge
 from dyna.program import Program, TransformedProgram, Define, inf
 
 import pandas
@@ -269,7 +269,7 @@ class ProgramGraph:
         return self.graph[x]
 
     def add(self, x):
-        from dyna import Fold, Unfold, TransformedProgram
+        from dyna import Fold, Unfold
         if isinstance(x, Fold):
             self.graph[x].add(('fold', x, (x.parent, x.defs)))
         elif isinstance(x, Unfold):
