@@ -11,7 +11,7 @@ from dyna import (
     InstFault
 )
 
-from dyna.builtin import NotMatchesConstaint, cmps
+from dyna.builtin import NotMatchesConstraint, cmps
 from dyna.execute.base import BaseSolver
 
 
@@ -150,7 +150,7 @@ class Solver(BaseSolver):
             raise InstFault(f'query mode not supported: {q}')
 
         elif q.fn == '$not_matches':
-            for r in NotMatchesConstaint(*q.fargs).run(self.program):
+            for r in NotMatchesConstraint(*q.fargs).run(self.program):
                 if r.is_const():
                     yield self.one
                 else:

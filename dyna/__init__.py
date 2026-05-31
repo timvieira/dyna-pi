@@ -16,7 +16,7 @@ from dyna.program import (
     TransformedProgram, Program, to_collection,
     Define, join_f, CostDegrees
 )
-from dyna.builtin import not_matches3, BuiltinConstaint, NotMatchesConstaint
+from dyna.builtin import not_matches3, BuiltinConstraint, NotMatchesConstraint
 from dyna.programs import ProgramCollection
 from dyna.rule import Rule, is_const
 from dyna.derivations import Derivation, Derivations

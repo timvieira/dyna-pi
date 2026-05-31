@@ -10,7 +10,7 @@ from itertools import count, combinations
 from semirings import base, Float
 
 from dyna.builtin import (
-    Builtins, BuiltinConstaint, NotMatchesConstaint, cmps, is_builtin,
+    Builtins, BuiltinConstraint, NotMatchesConstraint, cmps, is_builtin,
 )
 from dyna import syntax
 from dyna.pretty import PrettyPrinter, pp, Escape
@@ -1328,12 +1328,12 @@ input/output declarations</summary>\
                     yield r
                 return
 
-            if isinstance(q, BuiltinConstaint):
+            if isinstance(q, BuiltinConstraint):
                 yield from q.run(self)
                 return
 
             if q.fn == '$not_matches':
-                yield from NotMatchesConstaint(*q.fargs).run(self)
+                yield from NotMatchesConstraint(*q.fargs).run(self)
                 return
 
         # END BUILTINS

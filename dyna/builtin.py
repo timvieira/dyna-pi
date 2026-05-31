@@ -24,13 +24,13 @@ def assert_type(x, t):
     return x
 
 
-class BuiltinConstaint(Term):
+class BuiltinConstraint(Term):
 
     def run(self, program):
         raise NotImplementedError()
 
 
-class NotMatchesConstaint(BuiltinConstaint):
+class NotMatchesConstraint(BuiltinConstraint):
 
     def run(self, program):
         q = self
@@ -78,7 +78,7 @@ def is_builtin(x):
     "True iff `x` is a builtin subgoal (a variable, a builtin constraint, or a recognized `(functor, arity)`)."
     x = snap(x)
     if is_var(x): return True
-    if isinstance(x, BuiltinConstaint): return True
+    if isinstance(x, BuiltinConstraint): return True
     return isinstance(x, Term) and (x.fn, x.arity) in BUILTIN_SIGS
 
 
@@ -99,7 +99,7 @@ def not_matches3(a, b):
     if is_var(snap(a)):     return           # statically false
     elif not unifies(a, b): yield Product()  # statically true
     else:                                    # statically unknown
-        yield Product((NotMatchesConstaint('$not_matches', lam(a), b),))
+        yield Product((NotMatchesConstraint('$not_matches', lam(a), b),))
 
 
 class Builtins:
