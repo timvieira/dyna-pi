@@ -442,18 +442,45 @@ input/output declarations</summary>\
     def append(self, r):
         return self.update(r.head, *r.body)
 
+    def _invalidate_caches(self):
+        """Drop rule-derived caches after a mutation to `self.rules`.
+
+        Clearing a `cached_property` is O(1) (its value is only recomputed on
+        the next read), so calling this per-mutation is cheap: in the
+        append-heavy hot loops (`step`, `agenda`, `seminaive`, `newton`) none of
+        these caches are read between mutations, so nothing is recomputed.
+
+        Note: `_cache_f2r` is maintained incrementally here and in `pop`, and
+        `_buckets` is reset in `pop`, so neither is dropped here.  `builtins` and
+        `measure` are deliberately excluded -- they aren't derived from
+        `self.rules` (the builtin registry, and the transform history of
+        `self.root`, respectively).
+        """
+        for k in ('signature', '_hash_cache', 'syms', 'degree'):
+            self.__dict__.pop(k, None)
+        # Clear in place rather than reallocating: `_add_rule` calls this on
+        # every append, and the append-heavy hot loops (`step`, `agenda`,
+        # `seminaive`, `newton`) would otherwise churn a fresh object per rule.
+        self._caches._caches.clear()   # degrees, prune*, ...
+
     def _add_rule(self, r):
         i = len(self.rules)
         self.rules.append(r)
         if self._cache_f2r is not None:
             self._cache_f2r[r.head.fn].append(i)
+        self._invalidate_caches()
         return i
 
     def pop(self, i):
         "Remove rule at index i from the program"
         r = self.rules.pop(i)
-        if self._cache_f2r is not None:
-            self._cache_f2r[r.head.fn].remove(i)
+
+        # `_cache_f2r` and `_buckets` both index rules by *position*. Popping
+        # position `i` shifts every later rule down by one, so we can't update
+        # them incrementally here: the old `self._cache_f2r[r.head.fn].remove(i)`
+        # only dropped index `i` and left every index > i stale (pointing at the
+        # wrong rule). Both rebuild lazily from `None` (see `f2r` /
+        # `_make_buckets`), so we reset them.
 
         # For constant rhs rules, the bucket data structure maps a canonicalized
         # head to a rule index that corresponds to where the values for this
@@ -467,9 +494,14 @@ input/output declarations</summary>\
         # better ot use a dictionary.
 
         # maybe the fix is to have an additional index based on rule id and to tweak
-        # the bucket strategy to use ids rather than positions?
+        # the bucket strategy to use ids rather than positions?  This is the real
+        # fix that would let pop be incremental, but it is coupled to the
+        # position-based rule handle `r.i` (used by derivations, unfold, elim,
+        # ...), so it belongs with that cleanup rather than here.
 
-        self._buckets = None   # XXX: update instead of resetting
+        self._cache_f2r = None
+        self._buckets = None
+        self._invalidate_caches()
         return r
 
     def fresh(self):
@@ -538,26 +570,26 @@ input/output declarations</summary>\
     def metric(self, other):
         """Distance between two programs.
 
-        Shapes that get a tolerance-based numerical comparison (the
-        natural chart representation):
-          - Fully ground programs (every head and body is ground), or
-          - Programs whose rules each have a constant-only body but
-            possibly nonground heads.
+        Shapes that get a tolerance-based numerical comparison (the natural
+        chart representation):
+         - Fully ground programs (every head and body is ground), or
+         - Programs whose rules each have a constant-only body but possibly
+           nonground heads.
 
-        After `constant_folding` both collapse to "every rule is
-        `head <op> Const(value)`". Heads are aligned modulo variable
-        renaming via `canonicalize`. The contribution is the max over
-        heads of `Semiring.metric(value_self, value_other)`, with heads
-        present in only one program contributing
-        `Semiring.metric(value, zero)`.
+        After `constant_folding` both collapse to "every rule is `head +=
+        value`". Heads are aligned modulo variable renaming via
+        `canonicalize`. The contribution is the max over heads of
+        `Semiring.metric(value_self, value_other)`, with heads present in only
+        one program contributing `Semiring.metric(value, zero)`.
 
-        Rules with non-constant bodies (symbolic subgoals — the usual
-        case for arbitrary programs) fall back to structural equality:
-        contribution `0` if both programs have the exact same multiset
-        of symbolic rules (modulo variable renaming and subgoal
-        reordering, via the existing rule signature), `inf` otherwise.
+        Rules with non-constant bodies (symbolic subgoals — the usual case for
+        arbitrary programs) fall back to structural equality: contribution `0`
+        if both programs have the exact same multiset of symbolic rules (modulo
+        variable renaming and subgoal reordering, via the existing rule
+        signature), `inf` otherwise.
 
         The two contributions are combined via `max`.
+
         """
         if isinstance(other, (str, list)): other = Program(other)
         if self.semiring is not None and other.semiring is None:

@@ -897,6 +897,36 @@ def test_program_collection_stuff():
     """)
 
 
+def test_pop_invalidates_position_indexed_caches():
+    # Regression: `pop` must reset the position-indexed caches (`_cache_f2r`,
+    # `_buckets`).  Popping position `i` shifts every later rule down by one, so
+    # the old incremental `self._cache_f2r[fn].remove(i)` left every index > i
+    # stale -- pointing at the wrong rule, or past the end of `self.rules`.
+    p = Program("""
+    f(1) += 1.
+    f(2) += 1.
+    f(3) += 1.
+    g(9) += 1.
+    """)
+
+    # Build the functor->positions index.
+    assert p.f2r('f') == [0, 1, 2]
+    assert p.f2r('g') == [3]
+
+    # Remove f(1) at position 0; f(2), f(3), g(9) all shift down by one.
+    p.pop(0)
+
+    # With the stale-index bug, g's cached index (3) is now out of range and
+    # f's indices (1,2) point at f(3)/g(9).  After the fix the index rebuilds.
+    assert p.f2r('g') == [2]
+    assert p.f2r('f') == [0, 1]
+
+    # ...and lookups resolve to the correct rules (the buggy version raised
+    # IndexError on the g(9) query and returned the wrong heads for f(X)).
+    assert {repr(r.head) for r in p.lookup(term('g(9)'))} == {'g(9)'}
+    assert sorted(repr(r.head) for r in p.lookup(term('f(X)'))) == ['f(2)', 'f(3)']
+
+
 if __name__ == '__main__':
     from arsenal.testing_framework import testing_framework
     testing_framework(globals())
