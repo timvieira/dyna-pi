@@ -16,12 +16,14 @@ null_ptr = Ellipsis
 
 
 def gen_functor(prefix='$gen'):
+    "Generate a fresh, globally unique functor name (e.g. `$gen1`)."
     gen_functor.i += 1
     return f'{prefix}{gen_functor.i}'
 gen_functor.i = 0
 
 
 def gen_functor_reset():
+    "Reset the `gen_functor` counter (mainly to make tests deterministic)."
     gen_functor.i = 0
 gen_functor.reset = gen_functor_reset
 
@@ -34,11 +36,18 @@ gen.i = 0
 
 
 def gen_reset():
+    "Reset the `gen` counter (mainly to make tests deterministic)."
     gen.i = 0
 gen.reset = gen_reset
 
 
 def join_f(f, *xs):
+    """Take the product of the streams produced by `f(x)` over each `x` in `xs`.
+
+    Yields one `Product` per combination of results -- the `*` it uses is the
+    same shared-variable equijoin as `Join`.  An empty `xs` yields the unit
+    `Product()`.
+    """
     if len(xs) == 0:
         yield Product()
     else:
@@ -649,6 +658,7 @@ def generalizer(t1, t2, s1=Ellipsis, s2=Ellipsis):
 # HELPERS
 
 def is_var(x):
+    "True if `x` resolves (after snapping) to an unbound variable."
     return isinstance(snap(x), Var)
 
 #def is_bound(x):
@@ -662,6 +672,13 @@ def is_var(x):
 
 
 def lt(x, y):
+    """A total order over heterogeneous terms, backing `Term.__lt__`/`Var.__lt__`.
+
+    Lets constants, `Term`s, and `Var`s be sorted together deterministically:
+    terms compare componentwise over `fargs` (then by arity), variables sort
+    above non-variables and amongst themselves by name, and bare constants fall
+    back to native `<` (then to type name for otherwise-incomparable types).
+    """
     x = snap(x)
     y = snap(y)
 
@@ -700,6 +717,7 @@ def lt(x, y):
 
 
 def is_ground(x):
+    "True if `x` contains no unbound variables."
     if isinstance(x, Var):
         return x.is_bound() and is_ground(x.value)
     elif isinstance(x, (Term, list, tuple)):
@@ -709,6 +727,11 @@ def is_ground(x):
 
 
 def snap(x):
+    """Dereference `x` through any chain of bound variables.
+
+    Returns the underlying value or terminal (unbound) variable.  Shallow: it
+    does not descend into a `Term`'s arguments (use `deref` for that).
+    """
     return snap(x.value) if isinstance(x, Var) and x.is_bound() else x
 
 
@@ -721,6 +744,7 @@ def canonicalize(X):
 
 
 def _canonicalize(x, vs):
+    "Rewrite `x`, replacing each distinct variable by a canonical one (`vs` memoizes the mapping by `id`)."
     x = snap(x)
 
     if isinstance(x, Var):
@@ -754,6 +778,7 @@ def _canonicalize(x, vs):
 
 _cvars = []
 def _canonicalize_var(i):
+    "Return the `i`-th canonical variable (`$X{i}`), interned so equal indices give the same `Var`."
     for _ in range(len(_cvars), i+1):
         _cvars.append(Var(f'$X{i}'))
     return _cvars[i]
@@ -788,6 +813,7 @@ def term_vars(x, vs=None):
 #from arsenal.misc import deprecated
 #@deprecated('replace vars(x) -> term_vars(x).')
 def vars(x):
+    "Deprecated alias for `term_vars`; kept so existing callers keep working."
     return term_vars(x)
 
 
@@ -849,7 +875,7 @@ class FreshCache:
     """A pool of reusable fresh copies of objects, keyed by object identity.
 
     Used as a context manager (`with cache(r) as s: ...`), it hands out a
-    freshly-renamed copy of `r` and returns it to the pool on exit, so a hot
+    freshly renamed copy of `r` and returns it to the pool on exit, so a hot
     loop can reuse copies instead of re-running `fresh` every iteration.  It
     holds a reference to each original to keep its `id()` from being recycled.
 
@@ -915,7 +941,7 @@ class MostGeneralSet:
 
     Adding an element that is already subsumed by a member is a no-op; adding
     one that subsumes existing members evicts them.  The result is an antichain
-    of maximally-general terms -- useful for collapsing a set of rules/types to
+    of maximally general terms -- useful for collapsing a set of rules/types to
     the strongest representatives.  See `NoDupsSet` for the plain-equality
     variant.
 
