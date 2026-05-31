@@ -1,7 +1,7 @@
 import numpy as np
 from arsenal import colors
 
-from dyna import Program, Rule, fresh, vars, Term, unify, Subst
+from dyna import Program, Rule, fresh, term_vars, Term, unify, Subst
 from dyna.analyze import TypeAnalyzer
 
 from dyna.pretty import PrettyPrinter
@@ -50,7 +50,7 @@ class Param:
 
 def type_bound(S, stype, V):
     assert isinstance(S, TypeAnalyzer) and isinstance(stype, Rule)
-    assert issubset(V, vars(stype))
+    assert issubset(V, term_vars(stype))
     q = Program([fresh(stype)])
     ts = []
     T = S.intersect(q)
@@ -75,7 +75,7 @@ class SizeBounds:
     def lookup_bounds(self, c, V):
         assert isinstance(c, Term) and isinstance(V, (set, frozenset))
 
-        fully_bound = issubset(vars(c), V)
+        fully_bound = issubset(term_vars(c), V)
 
         if fully_bound:             # cost=1 if all vars are bound
             yield Param(1)
@@ -99,8 +99,8 @@ class SizeBounds:
 
         # Base case: no more constraints to consider: bound = 1.
         if len(remaining) == 0:
-            #assert vars(s.head).issubset(V), f'subgoal must come to ground: {s}, {V}'
-            if issubset(frozenset(vars(s.head)), V):
+            #assert term_vars(s.head).issubset(V), f'subgoal must come to ground: {s}, {V}'
+            if issubset(frozenset(term_vars(s.head)), V):
                 return Param(1)
             else:
                 # variables which do not come to ground are assumed to range over an
@@ -115,10 +115,10 @@ class SizeBounds:
 
                 if DEBUG:
                     pp = PrettyPrinter()
-                    print(indent, pp(c), pp(vars(c)), pp(V), '==>', cost)
+                    print(indent, pp(c), pp(term_vars(c)), pp(V), '==>', cost)
 
                 best ^= cost * self._stype_bound(
-                    V = frozenset(V) | frozenset(vars(c)),   # we assume that all variables are brought to ground by the mode
+                    V = frozenset(V) | frozenset(term_vars(c)),   # we assume that all variables are brought to ground by the mode
                     remaining = remaining - {c},             # no use in running this constraint again
                 )
 
@@ -199,7 +199,7 @@ class Runtime:
 
 #                ppp = PrettyPrinter(color=False).print
 #                ppp('run subgoal', passenger, '::', passenger_stype)
-#                ppp('  in mode:', set(V), '==> +', set(vars(passenger) - set(V)))
+#                ppp('  in mode:', set(V), '==> +', set(term_vars(passenger) - set(V)))
 #                ppp('  guarantees:', set(C), '==>', '+', set(C2 - C))
 #                assert C <= C2
 
@@ -207,12 +207,12 @@ class Runtime:
                     print(indent+'  ',
                           m('max passengers'), q,
                           m('for'), passenger_stype,
-                          m('given'), set(vars(passenger_stype) & V) or {})
+                          m('given'), set(term_vars(passenger_stype) & V) or {})
 
                 t += q * self._suffixtime(
                     subst1((suffix - {passenger})),
                     subst1(C2),
-                    subst1(frozenset(V | set(vars(passenger)))),   # [2022-01-17 Mon] assumes fully bound return, can generalize to other modes later.
+                    subst1(frozenset(V | set(term_vars(passenger)))),   # [2022-01-17 Mon] assumes fully bound return, can generalize to other modes later.
                 )
 
             best ^= t
@@ -225,7 +225,7 @@ class Runtime:
 
         if self.S.chart.is_builtin(b):
             # XXX: we (naively) assume that only fully bound builtins will run.
-            #if vars(b) <= subst:
+            #if term_vars(b) <= subst:
             #warnings.warn('naughty builtin assumption')
             yield (subst, Rule(b, b))
 

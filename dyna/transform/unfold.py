@@ -1,5 +1,5 @@
 from dyna import (
-    fresh, vars, TransformedProgram, Rule, Derivation, Product, Constant
+    fresh, term_vars, TransformedProgram, Rule, Derivation, Product, Constant
 )
 from functools import cached_property
 
@@ -61,7 +61,7 @@ class Unfold(TransformedProgram):
                 t = Rule(r.head, *r.body[:j], *s.body, *r.body[j+1:])
 
                 # Check if we lost a variable.
-                if not (set(vars(s)) <= set(vars(t))):
+                if not (set(term_vars(s)) <= set(term_vars(t))):
                     m = program.Semiring.multiple(inf)
                     if m != program.Semiring.one:
                         t = Rule(t.head, *t.body, m)

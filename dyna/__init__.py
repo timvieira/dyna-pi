@@ -1,7 +1,7 @@
 from semirings import *
 from dyna import term as term_
 from dyna.term import (
-    same, unifies, Subst, Var, Term, covers, Product, fresh, FreshCache, vars,
+    same, unifies, Subst, Var, Term, covers, Product, fresh, FreshCache, vars, term_vars,
     unify, is_var, snap, gen_functor, canonicalize, flatten_op, intersect,
     generalizer, deref, MostGeneralSet, NoDupsSet, DisjointEstimate,
     I, ResultStream, Constant, is_ground, gen

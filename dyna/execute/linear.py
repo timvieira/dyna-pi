@@ -1,6 +1,6 @@
 import numpy as np
 from arsenal import Integerizer, colors
-from dyna import TransformedProgram, Rule, Term, vars, canonicalize
+from dyna import TransformedProgram, Rule, Term, term_vars, canonicalize
 
 
 def kleene(A, semiring, reflexive=True):
@@ -70,7 +70,7 @@ class kleene_linsolve(TransformedProgram):
 
                     [h, v] = canonicalize(Term('tmp', r.head, var)).args
 
-                    if len(vars(v) - vars(h)) > 0:
+                    if len(term_vars(v) - term_vars(h)) > 0:
                         #print('warning dropped variable')
                         #print(h, '+=', v)
                         coeff = coeff * p.Semiring.multiple(float('inf'))

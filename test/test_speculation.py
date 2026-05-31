@@ -2,12 +2,12 @@ import numpy as np
 from arsenal import colors
 from collections import defaultdict
 
-from dyna import Program, NoDupsSet, fresh, Subst, unifies, covers, Var, vars, same, Symbol
+from dyna import Program, NoDupsSet, fresh, Subst, unifies, covers, Var, term_vars, same, Symbol
 #from dyna.transform.slash_enum import random_kwargs
 
 
 def vprime(x):
-    return Subst({v: Var(v.name + "'") for v in vars(x)})(x)
+    return Subst({v: Var(v.name + "'") for v in term_vars(x)})(x)
 
 
 def random_args(P, xs=None, prune=False):

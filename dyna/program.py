@@ -14,7 +14,7 @@ from dyna import syntax
 from dyna.pretty import PrettyPrinter, pp, Escape
 from dyna.rule import Rule, is_const
 from dyna.term import (
-    fresh, Var, unify, snap, Term, unifies, vars, covers, gen_functor,
+    fresh, Var, unify, snap, Term, unifies, term_vars, covers, gen_functor,
     is_ground, canonicalize, is_var, Product, flatten_op, FreshCache,
     deref, join_f, NoDupsSet,
     Stream, ResultStream, Constant
@@ -734,7 +734,7 @@ input/output declarations</summary>\
         for ss in self.partial_megafolds(d.fresh(), skip_trivial=False):
             if len(ss) == 1:
                 [rr] = ss
-                if len(rr.body) == 1 and set(vars(rr.head)) == set(vars(rr.body)):
+                if len(rr.body) == 1 and set(term_vars(rr.head)) == set(term_vars(rr.body)):
                     return ss
 
     #___________________________________________________________________________
@@ -836,7 +836,7 @@ input/output declarations</summary>\
 
     def is_range_restricted(self):
         "True iff every variable in each rule's head also appears in its body."
-        return all(not (vars(r.head) - vars(r.body)) for r in self.rules)
+        return all(not (term_vars(r.head) - term_vars(r.body)) for r in self.rules)
 
     # TODO: add the precision option like agenda.
     def fc(self, *, max_iter=None, chart=None, verbose=False, proj=lambda p: p):
@@ -881,7 +881,7 @@ input/output declarations</summary>\
                     if not (self.is_exogenous(a) or is_leaf(a)): return 1
                     return 0
                 def key(a):
-                    av = vars(a); new = av - bound
+                    av = term_vars(a); new = av - bound
                     return (bool(new),                                 # filters (no new vars) first
                             stage(a),                                  # binders → intensional → builtins
                             not (av & bound) and bool(bound),          # then connected
@@ -889,7 +889,7 @@ input/output declarations</summary>\
                 a = min(ys, key=key)
                 ys.remove(a)
                 ordered.append(a)
-                bound |= vars(a)
+                bound |= term_vars(a)
             return ordered
 
         magic_fn = self.gen_functor('$magic')
@@ -898,7 +898,7 @@ input/output declarations</summary>\
         rules = [Rule(magic(r.head), *reorder(r.body, set())) for r in self.outputs]
         for r in self.rules:
             gH = magic(r.head)
-            ordered = reorder(r.body, vars(r.head))
+            ordered = reorder(r.body, term_vars(r.head))
             rules.append(Rule(r.head, gH, *ordered))                   # guarded answer
             for j, f in enumerate(ordered):                            # demand each idb subgoal
                 if not self.is_exogenous(f):                           # facts are guarded too, so still demand them
@@ -1014,7 +1014,7 @@ input/output declarations</summary>\
             for r in self:                      # TODO: use indexing here
                 for k in range(len(r.body)):
                     for _ in unify(u.head, r.body[k]):
-                        change[r.head] = new[r.body[:k]] * Constant(u.body, vs=vars(r.body[k])) * old[r.body[k+1:]]
+                        change[r.head] = new[r.body[:k]] * Constant(u.body, vs=term_vars(r.body[k])) * old[r.body[k+1:]]
 
             old.update(u.head, *u.body)
 
@@ -1045,7 +1045,7 @@ input/output declarations</summary>\
             for k in range(len(r.body)):
                 # better to have an outer loop over change to improve the number of "prefix firings"
                 for value in d[r.body[k]]:
-                    q[r.head] = new[r.body[:k]] * Constant(value, vs=vars(r.body[k])) * old[r.body[k+1:]]
+                    q[r.head] = new[r.body[:k]] * Constant(value, vs=term_vars(r.body[k])) * old[r.body[k+1:]]
 
         return new, q.constant_folding()
 
@@ -1164,7 +1164,7 @@ input/output declarations</summary>\
         Check the rule for infinite multiplicies (i.e., nonground subgoals
         with nonzero values).
         """
-        if any(is_var(X) for X in vars(r.body) - vars(r.head)):
+        if any(is_var(X) for X in term_vars(r.body) - term_vars(r.head)):
             return self.Semiring.multiple(inf)
         else:
             return self.Semiring.one
@@ -1204,14 +1204,14 @@ input/output declarations</summary>\
     # XXX: Experimental method for adding a rule with potentially delayed
     # subgoals coming from a stream of bodies
     def __setitem__(self, x, ys):
-        if not isinstance(ys, Stream): ys = Constant(ys, vs=vars(ys))
-        vars_was = vars(x) | vars(ys)   # used to detect 'dropped variables'
+        if not isinstance(ys, Stream): ys = Constant(ys, vs=term_vars(ys))
+        vars_was = term_vars(x) | term_vars(ys)   # used to detect 'dropped variables'
         for y in ys:                                 # iterate the stream
             if not isinstance(y, tuple): y = (y,)
             r = Rule(x, *y)
-            # Below, we re-run vars on vars_was to drop variables that got bound
+            # Below, we re-run term_vars on vars_was to drop variables that got bound
             # by the product iterator.
-            if not (set(vars(vars_was)) <= set(vars(r))):
+            if not (set(term_vars(vars_was)) <= set(term_vars(r))):
                 r = Rule(x, *y, self.Semiring.multiple(inf))
             self.append(r)
         return self
@@ -1582,8 +1582,8 @@ input/output declarations</summary>\
 
         # Which variable are eliminated by the fold?  Variables only appear in `js`,
         # not in `head` or other `remaining_factors`.
-        elim_vars = vars(r.body) - (vars(rev_fs) | vars(r.head))
-        out_vars = (vars(tmp_fs) - elim_vars)
+        elim_vars = term_vars(r.body) - (term_vars(rev_fs) | term_vars(r.head))
+        out_vars = (term_vars(tmp_fs) - elim_vars)
 
         # Warning: sorting variables can lead to instability
         tmp_rule = Rule(Term(name, *out_vars), *tmp_fs)
@@ -1924,7 +1924,7 @@ input/output declarations</summary>\
     def generic_input_type_bindings(self, generic='$bound'):
         if self.inputs is None: return self.spawn()
         return Program([
-            Rule(t.head, *[Term(generic, v) for v in vars(t.head)])
+            Rule(t.head, *[Term(generic, v) for v in term_vars(t.head)])
             for t in self.inputs
         ], f'{generic}(_).')
 

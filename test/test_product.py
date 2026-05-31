@@ -1,6 +1,6 @@
 from arsenal import colors, ok
 
-from dyna.term import vars, Product, flatten, flatten_op
+from dyna.term import term_vars, Product, flatten, flatten_op
 from dyna.syntax import term
 from dyna.pretty import PrettyPrinter
 
@@ -31,7 +31,7 @@ def check_covering(xs, ys, subst, alignment, verbose=False):
 #        #assert want in {'<', '>', '=', '<>'}
 #        #print('test', a, colors.green % want, b)
 #        print(colors.yellow % 'test', pp(a), colors.yellow % 'vs', pp(b))
-#        assert vars(a).isdisjoint(vars(b))
+#        assert term_vars(a).isdisjoint(term_vars(b))
 #
 #        solutions = set()
 #        for s, j in a.subproduct(b):
@@ -64,7 +64,7 @@ def test_match_comm():
         #assert want in {'<', '>', '=', '<>'}
         #print('test', a, colors.green % want, b)
         print(colors.yellow % 'test', pp(a), colors.yellow % 'vs', pp(b))
-        assert vars(a).isdisjoint(vars(b))
+        assert term_vars(a).isdisjoint(term_vars(b))
 
         solutions = set()
         for s in a.match_comm(b):

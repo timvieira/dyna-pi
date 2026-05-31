@@ -5,7 +5,7 @@ Implementation of type-based abbreviation transformation.
 from arsenal import colors
 
 from dyna import (
-    Rule, PrettyPrinter, TransformedProgram, join_f, Term, vars, fresh,
+    Rule, PrettyPrinter, TransformedProgram, join_f, Term, term_vars, fresh,
     Subst, snap
 )
 
@@ -14,7 +14,7 @@ def body(x): return x.body if isinstance(x, Rule) else [x]
 
 
 def snap_vars(x):
-    return {snap(v) for v in vars(x)}
+    return {snap(v) for v in term_vars(x)}
 
 
 def freebies(r):
@@ -71,7 +71,7 @@ class Abbreviate(TransformedProgram):
             for t_body in join_f(self.types.chart.lookup, *r.body):
 
                 # constraint closure for the body's type
-                frees = [Term('$free', v) for v in vars(r.head) - vars(r.body)]
+                frees = [Term('$free', v) for v in term_vars(r.head) - term_vars(r.body)]
                 # body constraints before closure
                 body_constraints = [b for t_b in t_body for b in body(t_b)]
                 # body constraints after closure
@@ -119,11 +119,11 @@ class Abbreviate(TransformedProgram):
         t_type = self.types.chart.rules[t.i]
         #print(
         #    #colors.orange % 'inst name:',
-        #    #colors.orange % 'vars:', vars(t),
+        #    #colors.orange % 'vars:', term_vars(t),
         #    #colors.orange % 'free:', freebies(t),
         #    colors.orange % 't:', t, '\n',
         #    colors.orange % 't_type:', t_type,
         #)
         return Subst().mgu(t_type.head, t.head)(
-            Term(self._new_names[t.i], *(vars(t_type) - freebies(t_type)))
+            Term(self._new_names[t.i], *(term_vars(t_type) - freebies(t_type)))
         )

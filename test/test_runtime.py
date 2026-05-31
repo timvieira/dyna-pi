@@ -1,6 +1,6 @@
 from arsenal import colors
 
-from dyna import Program, vars, pp
+from dyna import Program, term_vars, pp
 from dyna.analyze.runtime import type_bound, Simplify, Symbol
 from arsenal.maths.combinatorics import powerset
 
@@ -50,7 +50,7 @@ def test_cky_less():
     for q in qs:
         print()
         print(colors.yellow % pp(q, color=False))
-        for V in powerset(vars(q)):
+        for V in powerset(term_vars(q)):
             print(type_bound(S, q, V = set(V)),
                   colors.magenta % 'mode:', set(V) or {})
 
@@ -80,7 +80,7 @@ def test_builtins():
     print(colors.yellow % 'size bounds:')
     for q in qs:
         print(colors.yellow % pp(q, color=False))
-        for V in powerset(vars(q)):
+        for V in powerset(term_vars(q)):
             b = type_bound(S, q, V = set(V))
             print(Simplify(b),
                   colors.magenta % 'mode:', set(V) or {})
@@ -111,7 +111,7 @@ def test_join():
     print(colors.yellow % 'size bounds:')
     for q in qs:
         print(colors.yellow % pp(q, color=False))
-        for V in powerset(vars(q)):
+        for V in powerset(term_vars(q)):
             b = type_bound(S, q, V = set(V))
             print(Simplify(b),
                   colors.magenta % 'mode:', set(V) or {})

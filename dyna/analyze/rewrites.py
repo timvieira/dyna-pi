@@ -5,7 +5,7 @@ from arsenal import colors
 from itertools import combinations
 
 from dyna.pretty import PrettyPrinter
-from dyna.term import Term, fresh, vars, Subst, is_var, generalizer, deref, MostGeneralSet
+from dyna.term import Term, fresh, term_vars, Subst, is_var, generalizer, deref, MostGeneralSet
 from dyna.program import Program, Rule
 from dyna.propagate import ConstraintPropagation, scons
 
@@ -100,8 +100,8 @@ class Rewrites:
 
                 # (equiv to dropping a checked constraint)
                 for X in free_vars:
-                    #if not all((y.fn == '$free' or X not in vars(y)) for y in chart):   # <=== equivalent condition
-                    if any((y.fn != '$free' and X in vars(y)) for y in chart):
+                    #if not all((y.fn == '$free' or X not in term_vars(y)) for y in chart):   # <=== equivalent condition
+                    if any((y.fn != '$free' and X in term_vars(y)) for y in chart):
                         drop.add(Term('$free', X))
 
             if not ALLOW_FREE_MERGE:
@@ -117,7 +117,7 @@ class Rewrites:
                 if any(sum((X == A or X == B) for [_,A,B] in cp.bindings) > 1 for X in free_vars):
                     return
 
-                if not all((y.fn == '$free' or X not in vars(y)) for y in chart for X in free_vars):
+                if not all((y.fn == '$free' or X not in term_vars(y)) for y in chart for X in free_vars):
                     return
 
         return Rule(subst(R.head), *(chart - drop))
@@ -212,7 +212,7 @@ class Rewrites:
         s = fresh(s)
 
         new_head = generalizer(r.head, s.head)
-        head_vars = vars(new_head)
+        head_vars = term_vars(new_head)
 
         # Propagate each body onto the shared generalized head.
         R = self.cp({*r.body, *scons(Subst().mgu(r.head, new_head))})
@@ -236,8 +236,8 @@ class Rewrites:
             x for x in set(R) | set(S)
             if isinstance(x, Term)
             and x.fn not in {'=', '$bound', '$free'}
-            and len(vars(x)) > 0         # drop ground, existential constraints (i.e., assume they succeed)
-            and vars(x) <= head_vars     # keep only head-connected constraints
+            and len(term_vars(x)) > 0         # drop ground, existential constraints (i.e., assume they succeed)
+            and term_vars(x) <= head_vars     # keep only head-connected constraints
         }
 
         body = {

@@ -1,11 +1,11 @@
 import numpy as np
 from arsenal import colors
 from dyna import Program, unifies, Symbol
-from dyna.term import NoDupsSet, fresh, Subst, unifies, covers, Var, vars, same
+from dyna.term import NoDupsSet, fresh, Subst, unifies, covers, Var, term_vars, same
 
 
 def vprime(x):
-    return Subst({v: Var(v.name + "'") for v in vars(x)})(x)
+    return Subst({v: Var(v.name + "'") for v in term_vars(x)})(x)
 
 
 def random_kwargs(P, xs=None):

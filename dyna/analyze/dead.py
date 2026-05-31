@@ -155,26 +155,9 @@ class ProgramCoarsening:
 def _prune_fast(program):
     "Prune based on superficial items in the program"
 
-    #if program.inputs is None or program.outputs is None: return program
     assert program.inputs is not None and program.outputs is not None
 
-    self = program
-
-#    def lookup(x):
-#        assert isinstance(x, Term)
-#        return list(nodes.roots(x))
-
-#    nodes = program.coarse_nodes()
-#    g = program.coarse_hypergraph()
-#    roots = nodes.roots
-
-#    inputs = {i for x in program.inputs.just_heads() for i in lookup(x)}
-#    outputs = {i for x in program.outputs.just_heads() for i in lookup(x)}
-
     c = ProgramCoarsening(program)
-
-    #E = {(e.head, frozenset(e.body)) for x in g.incoming for e in g.incoming[x]}
-#    T = g.reachability(inputs, outputs)
 
     def good(x):
         return any(True for _ in c.useful(x))

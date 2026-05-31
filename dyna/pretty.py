@@ -5,7 +5,7 @@ Pretty printer for term (term, var, rule, constants, etc)
 #  19: $inst(2, p("<.>", '#I'', '#K'') / p(".", '#I'', '#K'')) += 1.0.
 
 import re
-from dyna.term import Var, Term, NIL, snap, vars, OrderedSet
+from dyna.term import Var, Term, NIL, snap, term_vars, OrderedSet
 from dyna.rule import Rule
 from dyna.syntax import ops, ChainedCompare, BinOp, UnaryOp
 #from arsenal import colors
@@ -158,11 +158,11 @@ class PrettyPrinter:
 
             # enable variable coloring in rules
             # TODO: disable head variable coloring for nested rules
-            bs = vars(x.body)
-            hs = vars(x.head)
+            bs = term_vars(x.body)
+            hs = term_vars(x.head)
             local = bs - hs
 
-            for v in vars(x):
+            for v in term_vars(x):
                 self.var_color[id(v)] = self.color.green
 
 #            for v in (hs | bs): self.var_color[id(v)] = colors.white

@@ -10,7 +10,7 @@ from arsenal import colors
 from itertools import combinations
 
 from dyna import (
-    pp as _pp, PrettyPrinter, Boolean, Rule, Program, TransformedProgram, vars, fresh, Term, same, unify, Subst, Var,
+    pp as _pp, PrettyPrinter, Boolean, Rule, Program, TransformedProgram, term_vars, fresh, Term, same, unify, Subst, Var,
     MostGeneralSet, snap
 )
 from dyna.analyze.rewrites import Rewrites
@@ -34,7 +34,7 @@ _debug = debug
 def add_free_constraints(r):
     assert isinstance(r, Rule), r
     #r = deref(r)
-    return Rule(r.head, *r.body, *[Term('$free', v) for v in vars(r.head) - vars(r.body)])
+    return Rule(r.head, *r.body, *[Term('$free', v) for v in term_vars(r.head) - term_vars(r.body)])
 
 def remove_constants(p, r):
     assert isinstance(r, Rule), r
@@ -126,7 +126,7 @@ class TypeAnalyzer:
                     s[y.args[0]] = Foo(colors.dark.white % f'-{pr(y.args[0])}')
                 if y.fn == '$bound':
                     s[y.args[0]] = Foo(colors.dark.blue % f'+{pr(y.args[0])}')
-            for y in vars(x) - vars(x.body):
+            for y in term_vars(x) - term_vars(x.body):
                 s[y] = Foo(colors.light.red % f'±{pr(y)}')
 
             z = Rule(s(x.head), *[y for y in x.body if y.fn not in {'$bound', '$free'}])
@@ -210,8 +210,8 @@ class TypeAnalyzer:
             print(colors.red % f'[truncate]     {r.head}')
             print(colors.red % f'[truncate]  -> {h}')
         # Drop any constraint that mentions local variables.
-        head_vars = vars(h)
-        s = Rule(h, *{x for x in r.body if vars(x) <= head_vars and vars(x)})
+        head_vars = term_vars(h)
+        s = Rule(h, *{x for x in r.body if term_vars(x) <= head_vars and term_vars(x)})
         if self.DEBUG > 1:
             print(colors.yellow % '      init: ', _pp(_r, color=False))
             print(colors.yellow % '      prop: ', _pp(r, color=False))
@@ -281,7 +281,7 @@ class TypeAnalyzer:
             print()
             print(colors.light.magenta % _pp(s, color=False))
             if full:
-                for v in powerset(vars(s)):
+                for v in powerset(term_vars(s)):
                     vv = set(v) or {}
                     bound = Simplify(type_bound(self, s, v))
                     print(f'  {str(vv):>10}  {bound}')

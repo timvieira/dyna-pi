@@ -1,5 +1,5 @@
 from arsenal import colors
-from dyna import Program, Rule, vars, Subst, ConstraintPropagation
+from dyna import Program, Rule, term_vars, Subst, ConstraintPropagation
 
 
 def test_rewrites():
@@ -37,7 +37,7 @@ def test_rewrites():
         if r is None: return
         return Rule(r.head, *[
             x for x in r.body
-            if vars(x) <= vars(r.head) and vars(x)
+            if term_vars(x) <= term_vars(r.head) and term_vars(x)
         ])
 
     def error(r, want, have, R, theory):  # pragma: no cover

@@ -77,7 +77,7 @@ class LinearRuleElimination(TransformedProgram):
 #                    # ==>
 #                    # temp(X,X0) += rewrite(X,Y) * 1.
 #                    #
-#                    if not (set(vars(s)) <= set(vars(t))):
+#                    if not (set(term_vars(s)) <= set(term_vars(t))):
 #                        semiring = program.Semiring
 #                        m = semiring.multiple(inf)
 #                        t = Rule(r.head, *r.body[:j], *s.body, m, *r.body[j+1:])
