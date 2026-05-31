@@ -567,6 +567,19 @@ input/output declarations</summary>\
 
     same = __eq__
 
+    def _coerce_semirings(self, other):
+        """Coerce `other` to a `Program` and lift whichever side lacks a
+        semiring so both share one.  Returns the (possibly replaced)
+        `(self, other)` pair.  Shared by the semiring-aware comparisons
+        (`metric`, `assert_equal`).
+        """
+        if isinstance(other, (str, list)): other = Program(other)
+        if self.semiring is not None and other.semiring is None:
+            other = other.lift_semiring(self.semiring)
+        if other.semiring is not None and self.semiring is None:
+            self = self.lift_semiring(other.semiring)
+        return self, other
+
     def metric(self, other):
         """Distance between two programs.
 
@@ -591,11 +604,7 @@ input/output declarations</summary>\
         The two contributions are combined via `max`.
 
         """
-        if isinstance(other, (str, list)): other = Program(other)
-        if self.semiring is not None and other.semiring is None:
-            other = other.lift_semiring(self.semiring)
-        if other.semiring is not None and self.semiring is None:
-            self = self.lift_semiring(other.semiring)
+        self, other = self._coerce_semirings(other)
         a = self.constant_folding()
         b = other.constant_folding()
         sr = a.Semiring
@@ -675,11 +684,7 @@ input/output declarations</summary>\
         not run `constant_folding` or `rounding`.
 
         """
-        if isinstance(other, (list, str)): other = Program(other)
-        if self.semiring is not None and other.semiring is None:
-            other = other.lift_semiring(self.semiring)
-        if other.semiring is not None and self.semiring is None:
-            self = self.lift_semiring(other.semiring)
+        self, other = self._coerce_semirings(other)
         assert self.semiring == other.semiring
         tol = 10 ** (-precision) if precision is not None else 0
         d = self.metric(other)
