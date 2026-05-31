@@ -1,5 +1,5 @@
 from collections import Counter
-from dyna.term import Term, vars, canonicalize, fresh, snap, Var, Product, Subst, FAIL
+from dyna.term import Term, term_vars, canonicalize, fresh, snap, Var, Product, Subst, FAIL
 
 from functools import cached_property, lru_cache
 from dyna.util import FrozenBag, OrderedSet
@@ -75,7 +75,7 @@ class Rule(Term):
         if self is other: return True
         if self._hash_cache != other._hash_cache: return False
         #if self.signature != other.signature: return False
-        if not vars(self).isdisjoint(vars(other)): other = fresh(other)
+        if not term_vars(self).isdisjoint(term_vars(other)): other = fresh(other)
         s = Subst().cover(self.head, other.head)
         return any(
             (s != FAIL and s.is_non_specializing() and s(self.head) == other.head)
@@ -136,7 +136,7 @@ class Rule(Term):
             # As a general rule, fold should never introduce a variable - it
             # should only drop variables (by pushing them into the folder).
             #
-            annoying_var = (vars(R.head) - vars(R.body)) - vars(rest)
+            annoying_var = (term_vars(R.head) - term_vars(R.body)) - term_vars(rest)
             if 0: print('annoying_var:', annoying_var)
             R = Subst({v: "junk" for v in annoying_var})(R)
 
@@ -155,7 +155,7 @@ class Rule(Term):
 
             )
 
-            #assert vars(t) <= vars(self), 'should not happen'
+            #assert term_vars(t) <= term_vars(self), 'should not happen'
 
             # Safety check: reversibility condition, this is much slower
             # because of copy-overhead and equality testing
@@ -166,8 +166,8 @@ class Rule(Term):
             # Safety check: variable-locality condition. Folds should not
             # bind r-locals and should not introduce variables (it would
             # messing up the multiplicity).
-            V_inside = vars(R.body) - vars(R.head)
-            V_outside = vars(self.head) | vars(rest)
+            V_inside = term_vars(R.body) - term_vars(R.head)
+            V_outside = term_vars(self.head) | term_vars(rest)
 
             if V_inside.isdisjoint(V_outside):
                 folds.add(t)
@@ -226,13 +226,13 @@ class FoldedRule(Rule):
 class RuleAnalyzer_:
     def __init__(self, r):
         #assert isinstance(r, Rule), r
-        out_vars = vars(r.head)
+        out_vars = term_vars(r.head)
         # map from variables to factors
-        vs = vars(r)
+        vs = term_vars(r)
         v2f = {v: [] for v in vs}
         fs_with_vars = OrderedSet()        # indices of factors that contain at least one variable
         for i, x in enumerate(r.body):
-            for v in vars(x):
+            for v in term_vars(x):
                 v2f[v].append(i)
                 fs_with_vars.add(i)
 
@@ -241,7 +241,7 @@ class RuleAnalyzer_:
         self.rule = r
         self.head = r.head
         self.vs = vs
-        self.body_vars = vars(r.body)
+        self.body_vars = term_vars(r.body)
         self.local_vars = vs - out_vars
         self.out_vars = out_vars
         self.degree = len(vs)

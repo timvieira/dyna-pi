@@ -89,7 +89,23 @@ def flatten_op(x, op):
 
 
 class Var:
-    "Runtime variable"
+    """Runtime variable
+
+    A `Var` is a mutable binding cell (union-find style).  It starts out
+    unbound (`value is null_ptr`); unification destructively binds it by
+    setting `.value`.  Use `is_bound()` to test and `snap(x)` to dereference
+    through any chain of bindings to the underlying value (or terminal var).
+
+    Note that the name of the variable is optional and purely cosmetic.  All
+    `Var()` instances are fresh, even if they have the same `name` field.
+
+    Caveat: a `Var`'s hash and equality change when it becomes bound.  While
+    unbound it uses object identity (`object.__hash__`, `x is y`); once bound
+    it delegates to its value (`hash(self.value)`, `snap`-then-compare).  So do
+    not place an unbound `Var` in a `set`/`dict` and then bind it -- doing so
+    corrupts the container.
+
+    """
 
     __slots__ = ('name', 'value')
 
@@ -153,6 +169,10 @@ class Var:
 
 
 class Product(tuple):
+    """An ordered, multiplicative collection of factors (e.g., the subgoals on
+    the right-hand side of a rule).
+
+    """
 
     def __mul__(self, other):
         if not isinstance(other, tuple): other = (other,)
@@ -271,6 +291,15 @@ class Product(tuple):
 
 
 class Term:
+    """A functor (`fn`) applied to arguments (`args`); `arity` is `len(args)`.
+
+    Arguments may be constants, nested `Term`s, or `Var`s, so a term with
+    unbound variables stands for the whole set of its ground instances.
+    `unify(x, y)` makes two terms equal by binding their variables (see `Var`);
+    `Subst`/`sub` apply a substitution non-destructively, and `fresh` renames a
+    term's variables apart so it can be reused without aliasing.
+
+    """
 
     def __init__(self, *fargs):
         self.fargs = fargs
@@ -388,6 +417,18 @@ def unifyN(xs, ys):
 # TODO: we could have a special nonspecializing substitution class that give a
 # unification failure sooner and uses more bookkeeping for faster detection
 class Subst(dict):
+    """A substitution: a mapping from variables to terms.
+
+    This is the side-effect-free alternative to in-place unification: rather
+    than binding `Var`s destructively (via `Var.value`) and undoing them on
+    backtracking the way `unify` does, a `Subst` represents bindings explicitly
+    and applies them non-destructively -- calling `s(x)` rewrites `x`,
+    resolving chains of bindings.  `mgu(x, y)` extends the substitution to a
+    most-general unifier (or `FAIL`), while `cover(x, y)` extends it
+    one-directionally so that `s(x) == y` (matching/subsumption, leaving `y`
+    untouched).
+
+    """
 
     def __call__(self, x):
         if x in self:
@@ -510,6 +551,15 @@ def covers(x, y):
 # Fresh variables
 
 class Fresh:
+    """Renames the variables of a term apart, consistently.
+
+    Calling a `Fresh` instance maps each distinct input `Var` to a new `Var`,
+    memoizing the mapping in `self.m` so repeated occurrences of the same
+    variable stay shared in the result.  This is how a stored term (e.g., a
+    rule) is copied before unification so its variables don't alias those of
+    the query.  See the `fresh` convenience wrapper.
+
+    """
 
     def __init__(self, nice_name=True, m=Ellipsis):
         self.m = {} if m is Ellipsis else m
@@ -713,7 +763,7 @@ def _canonicalize_var(i):
 #
 
 
-def vars(x, vs=None):
+def term_vars(x, vs=None):
     "Extract all variables from `x`."
     if vs is None: vs = OrderedSet()
 
@@ -722,16 +772,23 @@ def vars(x, vs=None):
             vs.add(x)   # free variable
             return vs
         else:
-            return vars(x.value, vs)
+            return term_vars(x.value, vs)
 
     elif isinstance(x, (Term, list, tuple, set, OrderedSet)):
         for y in x:
-            vars(y, vs)
+            term_vars(y, vs)
 
     elif isinstance(x, Stream):
         vs |= x.vars
 
     return vs
+
+
+# TODO: we should deprecate this name.
+#from arsenal.misc import deprecated
+#@deprecated('replace vars(x) -> term_vars(x).')
+def vars(x):
+    return term_vars(x)
 
 
 def unifies(A, B):
@@ -789,6 +846,14 @@ def deref(x):
 
 
 class FreshCache:
+    """A pool of reusable fresh copies of objects, keyed by object identity.
+
+    Used as a context manager (`with cache(r) as s: ...`), it hands out a
+    freshly-renamed copy of `r` and returns it to the pool on exit, so a hot
+    loop can reuse copies instead of re-running `fresh` every iteration.  It
+    holds a reference to each original to keep its `id()` from being recycled.
+
+    """
 
     def __init__(self):
         self._cache = {}
@@ -807,6 +872,13 @@ class FreshCache:
 
 
 class NoDupsSet:
+    """A set with a caller-supplied equality test `same` (e.g., term variants).
+
+    Membership is decided by linear scan with `same` rather than `__hash__`/
+    `__eq__`, so it can dedup terms up to variable renaming where ordinary
+    hashing would not.  See `MostGeneralSet` for the subsumption-based variant.
+
+    """
     def __init__(self, xs, same):
         self.same = same
         self.xs = []
@@ -839,6 +911,15 @@ class NoDupsSet:
 
 
 class MostGeneralSet:
+    """A set that keeps only the most-general elements under a `covers` relation.
+
+    Adding an element that is already subsumed by a member is a no-op; adding
+    one that subsumes existing members evicts them.  The result is an antichain
+    of maximally-general terms -- useful for collapsing a set of rules/types to
+    the strongest representatives.  See `NoDupsSet` for the plain-equality
+    variant.
+
+    """
     def __init__(self, xs, covers):
         self.covers = covers
         self.xs = []
@@ -932,6 +1013,14 @@ class DisjointEstimate:
 
 
 class Stream:
+    """A lazy, re-iterable sequence of results, the unit of query evaluation.
+
+    Iterating a stream yields its results; multiplication (`x * y`) builds a
+    `Join` -- an equijoin that pairs results only when they agree on shared
+    variables.  Each subclass exposes the free variables it ranges over in
+    `.vars`.
+
+    """
 
     def __mul__(self, other):
         assert isinstance(other, Stream), other
@@ -960,10 +1049,11 @@ class Stream:
 
 
 class ResultStream(Stream):
+    "Streams the results of calling `f(*args)` (e.g., a builtin relation)."
     def __init__(self, f, *args):
         self.f = f
         self.args = args
-        self.vars = vars(self.args)
+        self.vars = term_vars(self.args)
     def __iter__(self):
         return iter(self.f(*self.args))
     def __repr__(self):
@@ -973,11 +1063,12 @@ class ResultStream(Stream):
 
 
 class Join(Stream):
+    "Equijoin of two streams: each `x` from `xs` paired with each compatible `y` from `ys`, where iterating `xs` binds the variables shared with `ys`."
     def __init__(self, xs, ys):
         assert isinstance(xs, Stream) and isinstance(ys, Stream)
         self.xs = xs
         self.ys = ys
-        self.vars = vars(xs) | vars(ys)
+        self.vars = term_vars(xs) | term_vars(ys)
     def __iter__(self):
         for x in self.xs:
             for y in self.ys:
@@ -991,7 +1082,7 @@ class Join(Stream):
 #        assert isinstance(xs, Stream) and isinstance(ys, Stream)
 #        self.xs = xs
 #        self.ys = ys
-#        self.vars = vars(xs) | vars(ys)
+#        self.vars = term_vars(xs) | term_vars(ys)
 #    def __iter__(self):
 #        yield from self.xs
 #        yield from self.ys
@@ -1001,7 +1092,7 @@ class Join(Stream):
 #    def __init__(self, f, xs):
 #        self.f = f
 #        self.xs = xs
-#        self.vars = vars(xs)
+#        self.vars = term_vars(xs)
 #    def __iter__(self):
 #        for x in self.xs:
 #            yield self.f(x)
@@ -1017,9 +1108,10 @@ class Join(Stream):
 
 
 class I(Stream):
+    "An equality guard: yields `v` once if `x` and `y` unify, else nothing."
     def __init__(self, x, y, v):
         self.v = v; self.x = x; self.y = y
-        self.vars = vars(x) | vars(y) | vars(v)
+        self.vars = term_vars(x) | term_vars(y) | term_vars(v)
     def __repr__(self):
         return f'{self.v}[{self.x}={self.y}]'
     def __iter__(self):
@@ -1028,9 +1120,10 @@ class I(Stream):
 
 
 class Constant(Stream):
+    "A singleton stream yielding the value `v` once."
     def __init__(self, v, vs=None):
         self.v = v
-        self.vars = vars(v) if vs is None else vs
+        self.vars = term_vars(v) if vs is None else vs
     def __repr__(self):
         return f'{self.v}'
     def __iter__(self):
