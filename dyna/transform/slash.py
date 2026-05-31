@@ -209,7 +209,7 @@ class Slash(TransformedProgram):
 
             elif len(dd.body) == 1:   # frozen
 
-                # XXX: The condtion above might not be a perfect test anymore
+                # XXX: The condition above might not be a perfect test anymore
                 # because of the special handling for useless others - need to
                 # double check...this worry might be ruled out by other factors
 

@@ -129,7 +129,7 @@ class PrettyPrinter:
         elif isinstance(x, Var):
 
             # Special handling for variable display names that occur more
-            # than once, but with different underlying varibles!
+            # than once, but with different underlying variables!
             if x.name not in self.vs:
                 self.vs[x.name] = {}
 

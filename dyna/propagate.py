@@ -80,7 +80,7 @@ class ConstraintPropagation:
     def __repr__(self):
         return f'{self.__class__.__name__} {Program(self.rules)}'
 
-    # the broarder picture of whats going on in this method is that we have some
+    # the broader picture of what's going on in this method is that we have some
     # constraints that are "checkable".  Checkable constraints must be
     # semi-deterministic (i.e., they are queries that have <= 1 answer and a
     # semizero/semione value).  These are common for builtins, but we can braden

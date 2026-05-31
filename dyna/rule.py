@@ -59,7 +59,7 @@ class Rule(Term):
     # Note that if we want argument order invariance, we'd have to sort the tuple.
     @cached_property
     def signature(self):
-        "Compute rule signaure"
+        "Compute rule signature"
         return (term_signature(self.head), FrozenBag(term_signature(x) for x in self.body))
 
     @cached_property

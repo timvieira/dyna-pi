@@ -52,7 +52,7 @@ class Abbreviate(TransformedProgram):
         for i, t in enumerate(self.types.chart):
             t.i = i   # assign type ids
 
-            # Give the abbrevation a familiar name based on the original function symbol
+            # Give the abbreviation a familiar name based on the original function symbol
             self._new_names[i] = self.parent._gen_functor(t.head.fn + f'_{i}')
 
             if self.parent.is_input(t.head):

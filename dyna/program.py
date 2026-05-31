@@ -1351,7 +1351,7 @@ input/output declarations</summary>\
     #___________________________________________________________________________
     # Rule indexing
 
-    # Note: We do this indexing lazily (and incrementaly) - especially since most programs
+    # Note: We do this indexing lazily (and incrementally) - especially since most programs
     # during transform search won't change the rules very much or even access
     # the index at all.
     def f2r(self, f):
@@ -2092,7 +2092,7 @@ input/output declarations</summary>\
 #        )
 
     # XXX: this method has a subtle bug: in order to have a coherent bijection, we
-    # require a canoncial path between derivations - we cannot mix and match which
+    # require a canonical path between derivations - we cannot mix and match which
     # derivations are mapping on a call-by-call basis!  This should be an easy fix.
     def Transform(self, d, target):
         """

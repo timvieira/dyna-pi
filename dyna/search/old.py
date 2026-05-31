@@ -319,9 +319,9 @@ class Graph1(GraphInterface):
     #
     # [2022-01-31 Mon]: This method will soon be retired in favor of
     # safe-megafold since safe megafold can use any definition that it likes -
-    # not just "oneliners" that we introduced by folds. (Note that oneliners are
+    # not just "one-liners" that we introduced by folds. (Note that one-liners are
     # a special case in the fold/unfold literature that goes back to the seminal
-    # T&S'84 paper so it makes sense that we started there too! They are alos
+    # T&S'84 paper so it makes sense that we started there too! They are also
     # much faster to pattern match for since its just only permutation not two!)
     def find_defs(self, p):
         ds = []

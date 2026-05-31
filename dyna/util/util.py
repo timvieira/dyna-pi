@@ -372,7 +372,7 @@ def setunset(obj, attr, val):
 
 
 #_______________________________________________________________________________
-# TODO: I don't like this solution, but the alterative is inefficient because it
+# TODO: I don't like this solution, but the alternative is inefficient because it
 # is constantly doing hash+eq on programs.
 
 from functools import wraps

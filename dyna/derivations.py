@@ -316,7 +316,7 @@ def step_derivations(p, chart):
 
             # TODO: include builtins in the other derivation enumeration
             # methods!  I think the nicest way to do it would be to unify the
-            # chart representations.  The reason it doens't happen automatically
+            # chart representations.  The reason it doesn't happen automatically
             # is because we didn't apply the "peel" trick to builtins; we only
             # did it for ordinary program items.
             ds = list(ds)

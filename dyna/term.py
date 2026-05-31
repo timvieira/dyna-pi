@@ -833,7 +833,7 @@ def same(x, y):
 
 
 def intersect(x, y):
-    "Create a fresh term that represents the interesection of terms `x` and `y`."
+    "Create a fresh term that represents the intersection of terms `x` and `y`."
     z = None
     for _ in unify(x, y):
         z = fresh(x)
