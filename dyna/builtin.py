@@ -246,7 +246,7 @@ class Builtins:
                             yield from unify(X, Y * Z)
                             return
                         # TODO: we can solve for K in some cases, e.g., `"aaaaa" is "a" * K`.
-                        # Can't mutliply string by anything other than an int.
+                        # Can't multiply string by anything other than an int.
                         raise TypeError(q)
 
                     else:

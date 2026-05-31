@@ -137,7 +137,7 @@ class BaseSolver:
         Load data specified as Dyna code.
         Warning: these rules will not be saved!
         """
-        # TODO: Add checks that the data match the input anntations; similarly,
+        # TODO: Add checks that the data match the input annotations; similarly,
         # add checks that the user queries match the output annotations.
         if not isinstance(data, Program): data = Program(data)   # parse here, lift below.
         if data.semiring is None and self.program.semiring is not None:

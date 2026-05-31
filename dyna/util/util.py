@@ -110,7 +110,7 @@ def display_groundings(*args, **kwargs):
 
 
 def render_groundings(self, chart=None, precision=None):
-    "Show instaniations of program rules against chart."
+    "Show instantiations of program rules against chart."
     lines = ['<table style="font-family: Courier New,monospace;">']
     if chart is None: chart = self.agenda()
     for i, r in enumerate(self.rules):

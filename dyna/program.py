@@ -485,7 +485,7 @@ input/output declarations</summary>\
         # The challenge with making the bucketing strategy incremental is that
         # the rules are numbered by their position in a list, which means that
         # deletion of an index changes all of their positions.  It would be
-        # better ot use a dictionary.
+        # better to use a dictionary.
 
         # maybe the fix is to have an additional index based on rule id and to tweak
         # the bucket strategy to use ids rather than positions?  This is the real
@@ -523,7 +523,7 @@ input/output declarations</summary>\
         )
 
     def is_exogenous(self, x):
-        "item that is defined elsehwere (i.e., constants, builtins, inputs)"
+        "item that is defined elsewhere (i.e., constants, builtins, inputs)"
         return self.is_const(x) or self.is_builtin(x) or self.is_input(x)
 
     def is_item(self, x):
@@ -700,7 +700,7 @@ input/output declarations</summary>\
     def align(self, S):
         """
         Align rules in `self` to those in `S`.  This is used in checking program
-        equivalence, which requries a perfect alignment (bijection between
+        equivalence, which requires a perfect alignment (bijection between
         rules).  Alignment is invariant to variable renaming and subgoal
         reordering.
 
@@ -878,7 +878,7 @@ input/output declarations</summary>\
 
     def magic_templates(self):
         "Textbook magic templates, output-directed, on the Boolean semiring."
-        # Identify leaves of the coarse depdency graph for use in the ordering heuristic
+        # Identify leaves of the coarse dependency graph for use in the ordering heuristic
         cg = self._coarse_graph()
         def is_leaf(a):
             a = snap(a)
@@ -1151,7 +1151,7 @@ input/output declarations</summary>\
         return q
 
     def instantiate(self, chart=None):
-        "Instaniate program rules against chart."
+        "Instantiate program rules against chart."
         if chart is None: chart = self.agenda()
         G = self.spawn()
         #G.inputs = chart.inputs
@@ -1166,7 +1166,7 @@ input/output declarations</summary>\
         return G
 
     def show_groundings(self, chart=None, precision=None):
-        "Show instaniations of program rules against chart."
+        "Show instantiations of program rules against chart."
         if chart is None: chart = self.agenda()
         for i, r in enumerate(self.rules):
             print(colors.render(colors.dark.magenta % f'# {i}: {r.__repr__(color=False)}'))
@@ -1179,7 +1179,7 @@ input/output declarations</summary>\
 
     def multiple(self, r):
         """
-        Check the rule for infinite multiplicies (i.e., nonground subgoals
+        Check the rule for infinite multiplicities (i.e., nonground subgoals
         with nonzero values).
         """
         if any(is_var(X) for X in term_vars(r.body) - term_vars(r.head)):
@@ -1444,7 +1444,7 @@ input/output declarations</summary>\
         """
         Resolve all unification constraints.
 
-        The dual of this method (`normalize_unification2`) normalizes unfications to a
+        The dual of this method (`normalize_unification2`) normalizes unifications to a
         collection of shallow equality predicates.
         """
         new = self.spawn()
@@ -1587,12 +1587,12 @@ input/output declarations</summary>\
 
     def loop_absorption(self, i, js, name='$gen'):
         """
-        Generate a new definition using the loop absorbtion recipe (aka hook trick).
+        Generate a new definition using the loop absorption recipe (aka hook trick).
         """
         return self._loop_absorption(i, js, self.gen_functor(name))
 
     def _loop_absorption(self, i, js, name):
-        "Generate a new definition using the loop absorbtion recipe"
+        "Generate a new definition using the loop absorption recipe"
         assert isinstance(i, int), i
         r = self.rules[i]
 
@@ -1682,7 +1682,7 @@ input/output declarations</summary>\
                     continue
                 p_sig = self.rules[j]._body_fns
                 is_sub = all(d_sig[k] <= p_sig[k] for k in d_sig)
-                if not is_sub: continue   # skip because it is guanateed to be unproductive
+                if not is_sub: continue   # skip because it is guaranteed to be unproductive
                 for u in self.rules[j].folds_by(defs.rules[i]):
                     #if not defs.safe_inline(u.body[u.j]): continue
                     if skip_trivial and len(u.body) == 1 and u.head == u.body[0]: continue
@@ -1896,7 +1896,7 @@ input/output declarations</summary>\
 
             nrs.append(Rule(h, *ys))
 
-        return TransformedProgram('normalize-unfication', self, nrs)
+        return TransformedProgram('normalize-unification', self, nrs)
 
     #___________________________________________________________________________
     # Analysis
@@ -2155,7 +2155,7 @@ class TransformedProgram(Program):
 
 # TODO: add a check for overlap -- if we add a new rule it needs a distinct name
 # space (i.e., a sufficient "fresh" name) or else we run the risk of this
-# transformation not being semantics-preserving.  It is more naunced than this,
+# transformation not being semantics-preserving.  It is more nuanced than this,
 # as this has to be the case for *all* programs in a provenance tree.  Note that
 # Tim's thesis makes the simplifying assumption that all definitions appear in
 # the original program so all transformed programs inherit from it.  We may also
