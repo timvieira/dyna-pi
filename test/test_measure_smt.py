@@ -707,7 +707,7 @@ def test_slash():
     Q = q.derivations(None, 'goal')
 
     # these derivations happen to enumerate in the same order, but it's not
-    # guarnateed to happen in generate.  That is way we have the derivation
+    # guaranteed to happen in generate.  That is way we have the derivation
     # mapping function (bijection)
     mP = [m(p).derivation_measure(d) for d in P]
     mQ = [m(q).derivation_measure(d) for d in Q]
@@ -763,7 +763,7 @@ def test_lct():
     Q = q.derivations(None, 'goal')
 
     # these derivations happen to enumerate in the same order, but it's not
-    # guarnateed to happen in generate.  That is way we have the derivation
+    # guaranteed to happen in generate.  That is way we have the derivation
     # mapping function (bijection)
     mP = [m(p).derivation_measure(d) for d in P]
     mQ = [m(q).derivation_measure(d) for d in Q]

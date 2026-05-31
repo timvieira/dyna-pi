@@ -10,7 +10,7 @@ def run_sequence_tests(ps, x, T):
     "Transform derivations between all pairs of programs in the sequence `ps`."
     Ds = [p.derivations(T, x) for p in iterview(ps, 'derivations', transient=1)]
 
-    # TODO: ressurect these tests
+    # TODO: resurrect these tests
     if 0:
 
         for p, D in zip(ps, Ds):

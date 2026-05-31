@@ -390,7 +390,7 @@ def test_power_iteration():
 
     want = (p+D).sol().user_query('q(X)')
 
-    # apply speculation to the inital state probability p(S).
+    # apply speculation to the initial state probability p(S).
     q = p.lct({0:1,1:2})
 
     #print(q)
@@ -398,7 +398,7 @@ def test_power_iteration():
     print(q.prune())
     check(q.prune())
 
-    # apply speculation to the inital state probability p(S).
+    # apply speculation to the initial state probability p(S).
     q = p.lct({0:1,1:2}, x='q(_)')
     #print(q)
     #check(q)

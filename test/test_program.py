@@ -689,7 +689,7 @@ def test_fancy_steps():
     # imagine speculation running in the "projection" step of forward chaining,
     # but maybe not?)  Related to: https://github.com/timvieira/dyna-pi-dev/issues/23
     #
-    #  [2026-04-27 Mon] This example now works, but we haven't revisted the issue
+    #  [2026-04-27 Mon] This example now works, but we haven't revisited the issue
     #
     from dyna.propagate import ConstraintPropagation
     rewrites = ConstraintPropagation('')   # propagation only removes duplicates in this case.

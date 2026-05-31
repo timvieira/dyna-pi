@@ -8,7 +8,7 @@ def test_basics():
         # [2022-11-26 Sat] The following program is not "linear" under a strict
         # definition of each rule has ≤ 1 item in its body.  That said, there is
         # an evaluation order which "eliminates" the subgoals `a` and `b` and
-        # then we are only left with the linear cylic program over `x`.
+        # then we are only left with the linear cyclic program over `x`.
         p = Program("""
         x += b.
         x += a * x.

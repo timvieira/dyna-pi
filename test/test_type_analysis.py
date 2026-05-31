@@ -533,7 +533,7 @@ def test_pda():
 
     p = Program("""
 
-    % inital stack is empty
+    % initial stack is empty
     pda([],0) += 1.
 
     % shift

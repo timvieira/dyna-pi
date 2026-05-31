@@ -462,7 +462,7 @@ def test_power_iteration():
 
     check(p)
 
-    # apply speculation to the inital state probability p(S).
+    # apply speculation to the initial state probability p(S).
     q = p.slash("p(S')", {0:1, 1:2}).prune()
     print(q)
     q.assert_equal("""
