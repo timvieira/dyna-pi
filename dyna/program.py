@@ -9,7 +9,9 @@ from functools import cached_property, wraps
 from itertools import count, combinations
 from semirings import base, Float
 
-from dyna.builtin import Builtins, BuiltinConstaint, NotMatchesConstaint
+from dyna.builtin import (
+    Builtins, BuiltinConstaint, NotMatchesConstaint, cmps, is_builtin,
+)
 from dyna import syntax
 from dyna.pretty import PrettyPrinter, pp, Escape
 from dyna.rule import Rule, is_const
@@ -33,14 +35,6 @@ class CostDegrees(tuple):
 
 
 inf = float('inf')
-
-
-cmps = {'<': lambda x,y: x < y,
-        '>': lambda x,y: x > y,
-        '!=': lambda x,y: x != y,
-        '==': lambda x,y: x == y,
-        '<=': lambda x,y: x <= y,
-        '>=': lambda x,y: x >= y}
 
 
 def _parse(rules, inputs=None, outputs=None):
@@ -535,23 +529,10 @@ input/output declarations</summary>\
     def is_item(self, x):
         return any(unifies(r.head, x) for r in self)   # might be crude (e.g., if X += (f(Y)=X) ...)
 
-    @staticmethod
-    def is_builtin(x):
-        x = snap(x)
-        if is_var(x): return True
-        if isinstance(x, BuiltinConstaint): return True
-        return isinstance(x, Term) and (x.fn, x.arity) in {
-            ('is', 2),
-            ('>', 2),
-            ('>=', 2),
-            ('<', 2),
-            ('<=', 2),
-            ('=', 2),
-            ('!=', 2),
-            ('$free', 1),
-            ('$bound', 1),
-            ('$not_matches', 2),
-        }
+    # Classification lives in `dyna.builtin` (the single source of truth, shared
+    # with the solvers); kept as a staticmethod so the `self.is_builtin(x)` /
+    # `Program.is_builtin(x)` callers stay unchanged.
+    is_builtin = staticmethod(is_builtin)
 
     #___________________________________________________________________________
     # Program equality/comparison
@@ -1290,6 +1271,7 @@ input/output declarations</summary>\
 
         assert isinstance(q, Term) and not isinstance(q, Rule), q
 
+        # TODO: need to test this more.
         if q.fn == '$lift':
             yield Rule(q, self.Semiring.lift(*q.args))
             return

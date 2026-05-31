@@ -9,6 +9,7 @@ from dyna.term import Term, Var, fresh, flatten, flatten_op
 from dyna.rule import Rule
 
 
+# TODO: we need an option to specify the semiring in the source code.
 class DynaTransformer(Transformer):
 
     def __init__(self):

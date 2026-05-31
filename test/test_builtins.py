@@ -420,6 +420,30 @@ def test_solver1_chained():
     """)
 
 
+def test_is_builtin_classification():
+    # Classification lives in dyna.builtin and is shared with Program.
+    from dyna.builtin import cmps, is_builtin, BUILTIN_SIGS
+    from dyna.term import Term, Var
+
+    # Program delegates to the single source of truth.
+    assert Program.is_builtin is is_builtin
+
+    # Every comparison operator in `cmps` must be classified as a builtin --
+    # this is the regression guard against the drift that previously dropped
+    # `==` from the classifier while leaving it evaluable.
+    for op in cmps:
+        assert ('==' in cmps)  # sanity: cmps carries ==
+        assert is_builtin(Term(op, Var(), Var())), op
+        assert (op, 2) in BUILTIN_SIGS, op
+
+    # Non-comparison builtins and the catch-alls.
+    assert is_builtin(Var())                       # bare variable
+    assert is_builtin(Term('is', Var(), Var()))
+    assert is_builtin(Term('=', Var(), Var()))
+    assert not is_builtin(Term('foo', Var()))      # ordinary item
+    assert not is_builtin(Term('<', Var()))        # wrong arity
+
+
 if __name__ == '__main__':
     from arsenal.testing_framework import testing_framework
     testing_framework(globals())

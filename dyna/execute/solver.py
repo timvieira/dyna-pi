@@ -15,7 +15,7 @@ from dyna import (
     is_ground, Term, snap
 )
 from dyna.execute.base import BaseSolver, tupleone
-from dyna.program import cmps
+from dyna.builtin import cmps
 
 
 class Solver(BaseSolver):

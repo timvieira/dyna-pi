@@ -52,6 +52,36 @@ class NotMatchesConstaint(BuiltinConstaint):
         return
 
 
+# Comparison builtins: functor -> the Python predicate that evaluates it once
+# both arguments are ground.  Shared by every evaluation site (`Program.lookup`
+# and both solvers' `lookup_vals`).
+cmps = {'<':  lambda x, y: x < y,
+        '>':  lambda x, y: x > y,
+        '!=': lambda x, y: x != y,
+        '==': lambda x, y: x == y,
+        '<=': lambda x, y: x <= y,
+        '>=': lambda x, y: x >= y}
+
+
+# (functor, arity) signatures of every recognized builtin.  This is the single
+# source of truth for classification (`is_builtin`); the comparison ops are
+# derived from `cmps` so the two can't drift (a separate hand-written copy in
+# `Program.is_builtin` previously omitted `==`, so analyses misclassified
+# `X == Y` as an ordinary item).
+BUILTIN_SIGS = (
+    {('is', 2), ('=', 2), ('$free', 1), ('$bound', 1), ('$not_matches', 2)}
+    | {(op, 2) for op in cmps}
+)
+
+
+def is_builtin(x):
+    "True iff `x` is a builtin subgoal (a variable, a builtin constraint, or a recognized `(functor, arity)`)."
+    x = snap(x)
+    if is_var(x): return True
+    if isinstance(x, BuiltinConstaint): return True
+    return isinstance(x, Term) and (x.fn, x.arity) in BUILTIN_SIGS
+
+
 class lam:
     def __init__(self, x):
         self.x = x

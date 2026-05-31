@@ -11,9 +11,8 @@ from dyna import (
     InstFault
 )
 
-from dyna.builtin import NotMatchesConstaint
+from dyna.builtin import NotMatchesConstaint, cmps
 from dyna.execute.base import BaseSolver
-from dyna.program import cmps
 
 
 class Solver(BaseSolver):
