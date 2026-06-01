@@ -171,6 +171,8 @@ class Program:
             #        for y in r.body
             #    ])
 
+            if color:
+                r = self._highlight_io(r, self.ansi_input_color, self.ansi_output_color)
             _r = pp(r, color=color)
             lines.append(f'{indent}{i}: {_r}.' if numbered else f'{indent}{_r}.')
         if close_brace is not None: lines.append(close_brace)
@@ -213,10 +215,19 @@ class Program:
 #        return output
 
 
-    # CSS color for input subgoals highlighted inline in rule bodies.  Inputs
-    # are exogenous (see `is_exogenous`), so a distinct purple sets them apart
-    # from local items (default), variables (green), and the aggregator (blue).
-    html_input_color = '<span style="color: #7b2fbe;">%s</span>'
+    # Printf-style templates for highlighting declared inputs/outputs inline in
+    # rule bodies, shared by both views: `*_input_color`/`*_output_color` for
+    # `_repr_html_` (HTML) and `__repr__` (ANSI).  Inputs and outputs are the two
+    # poles of a diverging pair -- inputs violet (exogenous, see `is_exogenous`),
+    # outputs gold (the program's goals); violet and yellow are color-wheel
+    # complements.  This sets them apart from local items (default color),
+    # variables (green), the aggregator (blue), and builtins (magenta).  The HTML
+    # and ANSI templates use the same hex so the two views color items
+    # identically.
+    html_input_color  = '<span style="color: #7b2fbe;">%s</span>'   # violet
+    html_output_color = '<span style="color: #d4a017;">%s</span>'   # gold
+    ansi_input_color  = colors.rgb(0x7b, 0x2f, 0xbe)                # violet #7b2fbe (matches HTML)
+    ansi_output_color = colors.rgb(0xd4, 0xa0, 0x17)                # gold   #d4a017 (matches HTML)
 
     # Class-level switch controlling whether `_repr_html_` (the representation
     # Jupyter renders automatically) folds in the input/output declarations.
@@ -230,11 +241,12 @@ class Program:
     def to_html(self, types=True):
         """Render the program as HTML.
 
-        Input subgoals are highlighted inline in the rule bodies (see
-        `html_input_color`).  When `types` is true and the program carries input
-        and/or output declarations, those are appended in a single collapsible
-        `<details>` block (collapsed by default, so it stays out of the way until
-        expanded).  Because `inputs`/`outputs` are themselves `Program`s -- which
+        Input and output subgoals are highlighted inline in the rule bodies
+        (see `html_input_color`/`html_output_color`).  When `types` is true and
+        the program carries input and/or output declarations, those are appended
+        in a single collapsible `<details>` block (collapsed by default, so it
+        stays out of the way until expanded).  Because `inputs`/`outputs` are
+        themselves `Program`s -- which
         may carry rule bodies, delayed constraints, and even their own
         declarations -- each is rendered by recursing into this same method, so
         arbitrarily general declaration programs display correctly.
@@ -244,34 +256,46 @@ class Program:
             html += self._html_types_section()
         return html
 
-    def _highlight_inputs(self, r):
-        """Return a copy of rule `r` whose input subgoals are colored.
+    def _highlight_io(self, r, input_color, output_color):
+        """Return a copy of rule `r` with its input/output items colored.
 
-        The functor is wrapped in an `Escape` (which `pp` emits verbatim) so the
-        arguments still pretty-print normally; arity-0 subgoals are emitted as a
-        bare `Escape` to avoid a spurious `foo()`.  Returns `r` unchanged when it
-        has no input subgoals.
+        Input items are wrapped in `input_color`, outputs in `output_color`
+        (each a printf-style template -- the HTML span or ANSI escape, depending
+        on the view).  Items are colored wherever they appear: the rule head
+        (outputs are typically heads, so this is what makes them visible) as
+        well as the body subgoals.  The functor is wrapped in an `Escape` (which
+        `pp` emits verbatim) so the arguments still pretty-print normally;
+        arity-0 items are emitted as a bare `Escape` to avoid a spurious
+        `foo()`.  Returns `r` unchanged when it has no input or output items.
         """
-        if self.inputs is None: return r
-        body, changed = [], False
+        def hl(y):
+            "Color y's functor if y is an input/output item; return (new_y, changed)."
+            template = None
+            if isinstance(y, Term):
+                if   self.is_input(y):  template = input_color
+                elif self.is_output(y): template = output_color
+            if template is None:
+                return y, False
+            colored = template % str(snap(y.fn))
+            return (Term(Escape(colored), *y.args) if y.args else Escape(colored)), True
+
+        head, changed = hl(r.head)
+        body = []
         for y in r.body:
-            if isinstance(y, Term) and self.is_input(y):
-                changed = True
-                colored = self.html_input_color % str(snap(y.fn))
-                body.append(Term(Escape(colored), *y.args) if y.args else Escape(colored))
-            else:
-                body.append(y)
-        return Rule(r.head, *body) if changed else r
+            new_y, c = hl(y)
+            changed = changed or c
+            body.append(new_y)
+        return Rule(head, *body) if changed else r
 
     def _html_code_block(self):
-        "The line-numbered, syntax-colored block of rules, inputs highlighted."
+        "The line-numbered, syntax-colored block of rules, inputs/outputs highlighted."
         if len(self) == 0:
             return (
                 '<div style="font-family: monospace; border: 1px solid #eee;'
                 ' font-size: 14px; padding: 5px; color: #999;">(no rules)</div>'
             )
         linenums = '<br>'.join(map(str, range(len(self))))
-        code = '<br/>'.join(pp(self._highlight_inputs(r), color='html')
+        code = '<br/>'.join(pp(self._highlight_io(r, self.html_input_color, self.html_output_color), color='html')
                             + '<span style="color: blue;">.</span>' for r in self)
         return f"""\
 <div style="display: flex; font-family: monospace; border: 1px solid #eee; font-size: 14px !important; text-align: left !important; overflow-x: auto;">\
@@ -288,10 +312,11 @@ class Program:
         displays correctly to arbitrary depth.
         """
         parts = []
-        for label, prog in [('inputs', self.inputs), ('outputs', self.outputs)]:
+        for label, prog, color in [('inputs', self.inputs, self.html_input_color),
+                                   ('outputs', self.outputs, self.html_output_color)]:
             if not prog: continue
             parts.append(
-                f'<div style="color: #7b2fbe; padding: 3px 0;">{label}:</div>'
+                f'<div style="padding: 3px 0;">{color % (label + ":")}</div>'
                 f'{prog.to_html(types=True)}'
             )
         return f"""\
@@ -1981,14 +2006,12 @@ input/output declarations</summary>\
     def show_transforms(self, show_program=False):
         print()
         print(colors.dark.yellow % '## Transforms')
-        prev = None
         for x in reversed(list(self.lineage())):
             if isinstance(x, TransformedProgram):
                 print(colors.render(colors.yellow % f'{x.name}'))
             else:
                 print(colors.yellow % 'original')
             if show_program: print(x)
-            prev = x
 
     def lineage(self):
         x = self

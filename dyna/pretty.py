@@ -182,6 +182,7 @@ class PrettyPrinter:
 
                 def wrap(z):
                     if isinstance(z, Rule): return parens(z)
+                    if isinstance(z, Escape): return z   # already rendered; emit verbatim
                     if not isinstance(z, (Var, Term)):
 #                        if hasattr(z, 'fsa'):
 #                            return Escape(f'<div style="display: inline; border:thin solid red;">{z.fsa.min()._repr_html_()}</div>')
