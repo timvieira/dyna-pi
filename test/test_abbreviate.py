@@ -60,6 +60,22 @@ def test_infinite_multiplicity():
     """)
 
     q = p.abbreviate()
+    q.assert_equal("""
+    f(1) += f_0.
+    f(X) += f_1.
+    g(1) += g_2.
+    g(X) += g_3.
+    goal += goal_4.
+
+    goal_4 += f_0.
+    goal_4 += ∞ * f_1.
+
+    f_0 += 2.
+    f_1 += 3.
+    g_2 += 4 * f_0.
+    g_3 += 4 * f_1.
+    """)
+
     qs = q.sol()
     #print(qs)
 
@@ -442,6 +458,63 @@ def test_startpath2():
     path_2(I,K) += path_2(I,J) * edge_0(J,K).
     path_2(I,J) += path_1 * edge_0(I,J).
 
+    """)
+
+
+def test_input_dispatch_keeps_user_type_constraints_not_free_bound_markers():
+
+    p = Program("""
+    use(I,J) += edge(I,J).
+
+    inputs: edge(I,J).
+    outputs: use(I,J).
+    """)
+
+    t = p.type_analysis(input_type="""
+    edge(I,J) :- n(I), n(J).
+
+    inputs: n(I).
+    """)
+
+    q = p.abbreviate(types=t)
+
+    q.assert_equal("""
+    edge_0(I,J) += edge(I,J) * n(I) * n(J).
+    use(I,J) += use_1(I,J).
+    use_1(I,J) += edge_0(I,J).
+    """)
+
+
+def test_default_abbreviation_uses_possible_types_not_useful_types():
+
+    p = Program("""
+    goal += a(I,I).
+    a(I,K) += b(I,J) * c(J,K).
+    goal += dead(X).
+
+    input: b(_,_); c(_,_).
+    output: goal.
+    """)
+
+    possible = p.abbreviate()
+    useful = p.abbreviate(types=p.usefulness_analysis())
+
+    possible.assert_equal("""
+    a(I,K) += a_0(I,K).
+    b_1(I,J) += b(I,J).
+    c_2(J,K) += c(J,K).
+    goal += goal_3.
+    goal_3 += a_0(I,I).
+    a_0(I,K) += b_1(I,J) * c_2(J,K).
+    """)
+
+    useful.assert_equal("""
+    a(I,I) += a_0(I).
+    b_1(I,J) += b(I,J).
+    c_2(J,I) += c(J,I).
+    goal += goal_3.
+    goal_3 += a_0(I).
+    a_0(K) += b_1(K,J) * c_2(J,K).
     """)
 
 
