@@ -2,7 +2,7 @@ import re
 from arsenal import assert_throws
 
 from dyna import Program
-from dyna.util import Graph, latex, run_cmd, render_groundings, tikz
+from dyna.util import Graph, GroundingsPrinter, latex, run_cmd, render_groundings, tikz
 
 
 def test_scc():
@@ -148,30 +148,81 @@ def test_render_groundings():
 
     have = str(render_groundings(p))
     want = """
-<table style="font-family: Courier New,monospace;">
-        <tr style="border: thin solid black;"><th></th>
-        <th style="text-align: left; vertical-align: top;">a += b * c
-        </th></tr>
-                <tr><td>1.0</td><td style="text-align: left; vertical-align: top;">
-                a += b * c
-                </td></tr>
-        <tr style="border: thin solid black;"><th></th>
-        <th style="text-align: left; vertical-align: top;">b += 1
-        </th></tr>
-                <tr><td>1</td><td style="text-align: left; vertical-align: top;">
-                b += 1
-                </td></tr>
-        <tr style="border: thin solid black;"><th></th>
-        <th style="text-align: left; vertical-align: top;">c += 1
-        </th></tr>
-                <tr><td>1</td><td style="text-align: left; vertical-align: top;">
-                c += 1
-                </td></tr>
-</table>
+<style>.grnd{interpolate-size:allow-keywords}.grnd::details-content{block-size:0;overflow:clip;transition:block-size .2s ease,content-visibility .2s;transition-behavior:allow-discrete}.grnd[open]::details-content{block-size:auto}</style>
+<details open class="grnd" style="font-family: Courier New,monospace; margin: 1px 0;">
+<summary style="cursor: pointer;"># 0: a <span style="color: blue;">+=</span> b * c</summary>
+<div style="margin-left: 0.55em; padding-left: 1em; border-left: 1px solid #ccc;"><table><tr><td style="vertical-align: top; padding-right: 1em; color: #888;">1.0</td><td style="text-align: left; vertical-align: top;">a <span style="color: blue;">+=</span> b * c</td></tr></table></div>
+</details>
+<details open class="grnd" style="font-family: Courier New,monospace; margin: 1px 0;">
+<summary style="cursor: pointer;"># 1: b <span style="color: blue;">+=</span> <span style="color: #aa6699;">1</span></summary>
+<div style="margin-left: 0.55em; padding-left: 1em; border-left: 1px solid #ccc;"><table><tr><td style="vertical-align: top; padding-right: 1em; color: #888;">1</td><td style="text-align: left; vertical-align: top;">b <span style="color: blue;">+=</span> <span style="color: #aa6699;">1</span></td></tr></table></div>
+</details>
+<details open class="grnd" style="font-family: Courier New,monospace; margin: 1px 0;">
+<summary style="cursor: pointer;"># 2: c <span style="color: blue;">+=</span> <span style="color: #aa6699;">1</span></summary>
+<div style="margin-left: 0.55em; padding-left: 1em; border-left: 1px solid #ccc;"><table><tr><td style="vertical-align: top; padding-right: 1em; color: #888;">1</td><td style="text-align: left; vertical-align: top;">c <span style="color: blue;">+=</span> <span style="color: #aa6699;">1</span></td></tr></table></div>
+</details>
 """
 
     assert re.sub('\s+', ' ', have.strip()) \
         == re.sub('\s+', ' ', want.strip())
+
+
+def test_show_groundings():
+    p = Program("""
+
+    a += b * c.
+
+    b += 1.
+    c += 1.
+
+    """)
+
+    d = p.agenda()
+    g = p.show_groundings(d)
+
+    # `show_groundings` returns a surface-aware pretty-printer, not None.
+    assert isinstance(g, GroundingsPrinter)
+
+    # Notebook surface: HTML matches the standalone `render_groundings`.
+    assert g._repr_html_() == render_groundings(p, d)
+
+    # Terminal surface: ANSI-stripped text shows each rule and its value.
+    text = re.sub(r'\x1b\[[0-9;]*m', '', repr(g))
+    assert '# 0: a += b * c' in text
+    assert '1.0: a += b * c' in text
+
+    # The grounding *data* lives on `Program`; metadata is out of band in the
+    # records, not patched onto the ground rules.
+    records = list(p.groundings(d))
+    assert [rec.i for rec in records] == [0, 1, 2]
+    assert all(not hasattr(rec.rule, '_contrib_value') for rec in records)
+    assert [str(r) for r in p.instantiate(d).rules] == [str(rec.rule) for rec in records]
+
+    # Filtering returns a new printer; the original is unchanged (immutable).
+    assert g.hide(1, 2).hidden == {1, 2}
+    assert g.only(0).hidden == {1, 2}
+    assert g.hidden == frozenset()
+    assert '1.0:' not in re.sub(r'\x1b\[[0-9;]*m', '', repr(g.hide(0)))   # rule 0 dropped from console
+    # HTML: every source rule is a collapsible <details>, expanded by default;
+    # a hidden rule starts collapsed.
+    assert g._repr_html_().count('<details open') == 3
+    assert g.hide(0)._repr_html_().count('<details open') == 2
+
+
+def test_show_groundings_colors():
+    p = Program("""
+    goal += a(I) * x(I).
+    a(I) += y(I).
+    inputs: x(_).
+    outputs: goal.
+    """)
+    html = p.show_groundings()._repr_html_()
+    # rules are syntax-colored, and declared input/output items carry their role
+    # colors -- the same `color='html'`/`roles` convention as `Program`'s HTML.
+    assert 'color: blue;">+=</span>' in html       # aggregator
+    assert 'color: green;">I</span>' in html        # variable
+    assert 'color: #d4a017;">goal</span>' in html   # output (gold)
+    assert 'color: #7b2fbe;">x</span>' in html      # input (violet)
 
 
 if __name__ == '__main__':

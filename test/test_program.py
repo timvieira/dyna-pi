@@ -3,6 +3,7 @@ import pytest
 from arsenal import colors, assert_throws
 from dyna import Program, CostDegrees, term, Rule, \
     ProgramCollection, DynaParserException, gen_functor
+from dyna.pretty import html_colors
 
 CI = os.environ.get('CI') == 'true'
 
@@ -49,14 +50,17 @@ def test_program_repr_html_types():
     assert 'input/output declarations' in html
 
     # input subgoals highlighted inline, arity-0 input has no spurious parens
-    assert Program.html_input_color % 'word' in html
-    assert Program.html_input_color % 'edge' in html
+    assert html_colors.input % 'word' in html
+    assert html_colors.input % 'edge' in html
     assert 'edge()' not in html
+
+    # output items highlighted too (here `goal` appears only as a head)
+    assert html_colors.output % 'goal' in html
 
     # `types=False` keeps inline highlighting but drops the declarations block
     bare = p.to_html(types=False)
     assert '<details' not in bare
-    assert Program.html_input_color % 'word' in bare
+    assert html_colors.input % 'word' in bare
 
     # a program with no declarations is unchanged (no block, no highlighting)
     q = Program('a += b * c.')

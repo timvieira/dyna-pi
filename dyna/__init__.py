@@ -14,7 +14,7 @@ from dyna.exceptions import *
 
 from dyna.program import (
     TransformedProgram, Program, to_collection,
-    Define, join_f, CostDegrees
+    Define, join_f, CostDegrees, Grounding
 )
 from dyna.builtin import not_matches3, BuiltinConstraint, NotMatchesConstraint
 from dyna.programs import ProgramCollection

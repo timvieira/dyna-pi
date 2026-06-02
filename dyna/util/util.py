@@ -109,26 +109,110 @@ def display_groundings(*args, **kwargs):
     return display(HTML(render_groundings(*args, **kwargs)))
 
 
-def render_groundings(self, chart=None, precision=None):
+def render_groundings(self, chart=None):
     "Show instantiations of program rules against chart."
-    lines = ['<table style="font-family: Courier New,monospace;">']
-    if chart is None: chart = self.agenda()
-    for i, r in enumerate(self.rules):
-        lines.append(f"""\
-        <tr style="border: thin solid black;"><th></th>
-        <th style="text-align: left; vertical-align: top;">{r.__repr__(color=False)}
-        </th></tr>
-        """)
-        with self._fresh(r) as r:
-            for v in chart[r.body]:
-                if isinstance(v, tuple) and len(v) >= 1: v = np.prod(v)
-                if precision is not None: v = round(v, precision)
-                lines.append(f"""\
-                <tr><td>{v}</td><td style="text-align: left; vertical-align: top;">
-                {r.__repr__(color=False)}
-                </td></tr>""")
-    lines.append('</table>')
-    return '\n'.join(lines)
+    return self.show_groundings(chart)._repr_html_()
+
+
+class GroundingsPrinter:
+    """
+    A surface-aware pretty-printer for a program's groundings, as returned by
+    `Program.show_groundings`: ANSI-colored text in a console (via `__repr__`)
+    and an HTML table in a notebook (via `_repr_html_`).
+
+    The grounding data itself lives on `Program` -- `Program.groundings(chart)`
+    yields the `Grounding(i, rule, value)` records, and `Program.instantiate`
+    collects them into a `Program`.  This class only decides how to display
+    them.  `hide/only/filter` return a new printer with some source rules
+    collapsed -- dropped from the console view, tucked into a `<details>` block
+    in the notebook view.
+    """
+
+    def __init__(self, program, chart=None, hidden=()):
+        self.program = program
+        self.chart = chart
+        self.hidden = frozenset(hidden)
+
+    def _groups(self):
+        "Group groundings by source rule: yield (i, source_rule, [(value, ground_rule), ...])."
+        rows = {}
+        for g in self.program.groundings(self.chart):
+            v = g.value
+            if isinstance(v, tuple) and len(v) >= 1: v = np.prod(v)
+            rows.setdefault(g.i, []).append((v, g.rule))
+        for i, r in enumerate(self.program.rules):
+            yield i, r, rows.get(i, [])
+
+    # -- view modifiers (each returns a new printer) ------------------------
+
+    def _clone(self, hidden):
+        return GroundingsPrinter(self.program, self.chart, hidden)
+
+    def hide(self, *idxs):
+        "Collapse the given source rules out of the display."
+        return self._clone(self.hidden | set(idxs))
+
+    def show(self, *idxs):
+        "Un-hide the given source rules."
+        return self._clone(self.hidden - set(idxs))
+
+    def only(self, *idxs):
+        "Show only the given source rules (collapse the rest)."
+        return self._clone(set(range(len(self.program.rules))) - set(idxs))
+
+    def filter(self, keep):
+        "Keep source rules where `keep(i, rule)` is true; collapse the rest."
+        return self._clone(frozenset(i for i, r in enumerate(self.program.rules)
+                                     if not keep(i, r)))
+
+    # -- rendering ----------------------------------------------------------
+
+    def __repr__(self):
+        "Show instantiations of program rules against chart."
+        lines = []
+        for i, r, rows in self._groups():
+            lines.append(colors.render(colors.dark.magenta % f'# {i}: {r.__repr__(color=False)}'))
+            if i in self.hidden:
+                lines.append(colors.dark.white % f'  ({len(rows)} grounding{"" if len(rows) == 1 else "s"} hidden)')
+                continue
+            for v, gr in rows:
+                pre = colors.magenta % f'{v}:'
+                lines.append(f'{pre} {gr}')
+        return '\n'.join(lines)
+
+    def _repr_html_(self):
+        # Outline/tree layout: each source rule is a collapsible <details> node
+        # whose summary is the *uninstantiated* rule (label-style `#i:` prefix),
+        # with its instantiations nested beneath it -- indented under a left
+        # guide line.  The nesting makes the template read as the parent heading,
+        # clearly separate from its instances (the template is not itself a fact;
+        # confusing it for one would double-count).  Rules use the
+        # `color='html'`/`roles` convention (input/output items colored by role).
+        # Smooth expand/collapse: animate the <details> content's block-size via
+        # the ::details-content pseudo-element.  Works where supported (current
+        # Chromium / Jupyter); elsewhere it just opens/closes instantly.
+        css = ('<style>'
+               '.grnd{interpolate-size:allow-keywords}'
+               '.grnd::details-content{block-size:0;overflow:clip;'
+               'transition:block-size .2s ease,content-visibility .2s;'
+               'transition-behavior:allow-discrete}'
+               '.grnd[open]::details-content{block-size:auto}'
+               '</style>')
+        def html(rule):
+            return rule.__repr__(color='html', roles=self.program._io_roles(rule))
+        blocks = []
+        for i, r, rows in self._groups():
+            body = '\n'.join(
+                f'<tr><td style="vertical-align: top; padding-right: 1em; color: #888;">{v}</td>'
+                f'<td style="text-align: left; vertical-align: top;">{html(gr)}</td></tr>'
+                for v, gr in rows)
+            open_attr = '' if i in self.hidden else ' open'
+            blocks.append(f"""\
+<details{open_attr} class="grnd" style="font-family: Courier New,monospace; margin: 1px 0;">
+<summary style="cursor: pointer;"># {i}: {html(r)}</summary>
+<div style="margin-left: 0.55em; padding-left: 1em; border-left: 1px solid #ccc;"><table>{body}</table></div>
+</details>""")
+        return css + '\n' + '\n'.join(blocks)
 
 
 def render_chart_and_groundings(self, chart, new_chart, **kwargs):
@@ -377,23 +461,26 @@ def setunset(obj, attr, val):
 
 from functools import wraps
 
-class InstanceCache:
-    def __init__(self):
-        self._caches = {}
-
-    def get_cache(self, func):
-        if func not in self._caches: self._caches[func] = {}
-        return self._caches[func]
-
 def instance_cache(func):
+    """Memoize a method per instance, keyed by its arguments.
+
+    Contract for the host class: it must define `self._caches = {}` and clear
+    it (e.g. `self._caches.clear()`) whenever state the cached methods depend on
+    mutates -- the decorator never invalidates on its own.  See `Program`, which
+    clears it from `_invalidate_caches` on every rule mutation.
+
+    All decorated methods share the one dict, disambiguated by `func` in the
+    key, so a single `clear()` drops every method's cache at once.  Arguments
+    must be hashable.  Note the key does not normalize call form, so `f(True)`,
+    `f(x=True)`, and `f()` (with `x` defaulting to `True`) cache separately.
+    """
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        cache = self._caches.get_cache(func)
-        key = (args, tuple(sorted(kwargs.items())))
+        cache = self._caches
+        key = (func, args, tuple(sorted(kwargs.items())))
         if key in cache: return cache[key]
-        result = func(self, *args, **kwargs)
-        cache[key] = result
+        result = cache[key] = func(self, *args, **kwargs)
         return result
 
     return wrapper

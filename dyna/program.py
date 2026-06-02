@@ -4,7 +4,7 @@ Programs and their associated methods.
 
 import numpy as np
 from arsenal import colors
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from functools import cached_property, wraps
 from itertools import count, combinations
 from semirings import base, Float
@@ -13,7 +13,7 @@ from dyna.builtin import (
     Builtins, BuiltinConstraint, NotMatchesConstraint, cmps, is_builtin,
 )
 from dyna import syntax
-from dyna.pretty import PrettyPrinter, pp, Escape
+from dyna.pretty import PrettyPrinter, pp, html_colors
 from dyna.rule import Rule, is_const
 from dyna.term import (
     fresh, Var, unify, snap, Term, unifies, term_vars, covers, gen_functor,
@@ -21,7 +21,7 @@ from dyna.term import (
     deref, join_f, NoDupsSet,
     Stream, ResultStream, Constant
 )
-from dyna.util import FrozenBag, tarjan, instance_cache, InstanceCache
+from dyna.util import FrozenBag, tarjan, instance_cache, GroundingsPrinter
 from dyna.util.bucket_queue import BucketQueue
 from dyna.util import OrderedSet
 from dyna.exceptions import DynaParserException
@@ -35,6 +35,13 @@ class CostDegrees(tuple):
 
 
 inf = float('inf')
+
+
+# A single firing of a rule against a chart: `rule` is the ground instance of
+# source rule `i`, carrying contribution `value`.  The out-of-band carrier for
+# grounding provenance/value -- produced by `Program.groundings` and rendered
+# by `GroundingsPrinter`, kept off the rule itself rather than bolted onto it.
+Grounding = namedtuple('Grounding', 'i, rule, value')
 
 
 def _parse(rules, inputs=None, outputs=None):
@@ -97,7 +104,7 @@ class Program:
         self.set_input_types(inputs)
         self.set_output_types(outputs)
 
-        self._caches = InstanceCache()
+        self._caches = {}
 
         self.semiring = semiring
         self.has_builtins = has_builtins
@@ -171,9 +178,7 @@ class Program:
             #        for y in r.body
             #    ])
 
-            if color:
-                r = self._highlight_io(r, self.ansi_input_color, self.ansi_output_color)
-            _r = pp(r, color=color)
+            _r = pp(r, color=color, roles=(self._io_roles(r) if color else None))
             lines.append(f'{indent}{i}: {_r}.' if numbered else f'{indent}{_r}.')
         if close_brace is not None: lines.append(close_brace)
         return sep.join(lines)
@@ -215,20 +220,6 @@ class Program:
 #        return output
 
 
-    # Printf-style templates for highlighting declared inputs/outputs inline in
-    # rule bodies, shared by both views: `*_input_color`/`*_output_color` for
-    # `_repr_html_` (HTML) and `__repr__` (ANSI).  Inputs and outputs are the two
-    # poles of a diverging pair -- inputs violet (exogenous, see `is_exogenous`),
-    # outputs gold (the program's goals); violet and yellow are color-wheel
-    # complements.  This sets them apart from local items (default color),
-    # variables (green), the aggregator (blue), and builtins (magenta).  The HTML
-    # and ANSI templates use the same hex so the two views color items
-    # identically.
-    html_input_color  = '<span style="color: #7b2fbe;">%s</span>'   # violet
-    html_output_color = '<span style="color: #d4a017;">%s</span>'   # gold
-    ansi_input_color  = colors.rgb(0x7b, 0x2f, 0xbe)                # violet #7b2fbe (matches HTML)
-    ansi_output_color = colors.rgb(0xd4, 0xa0, 0x17)                # gold   #d4a017 (matches HTML)
-
     # Class-level switch controlling whether `_repr_html_` (the representation
     # Jupyter renders automatically) folds in the input/output declarations.
     # Set `Program.show_types_in_html = False` to suppress them globally, or
@@ -241,51 +232,37 @@ class Program:
     def to_html(self, types=True):
         """Render the program as HTML.
 
-        Input and output subgoals are highlighted inline in the rule bodies
-        (see `html_input_color`/`html_output_color`).  When `types` is true and
-        the program carries input and/or output declarations, those are appended
-        in a single collapsible `<details>` block (collapsed by default, so it
-        stays out of the way until expanded).  Because `inputs`/`outputs` are
-        themselves `Program`s -- which
-        may carry rule bodies, delayed constraints, and even their own
-        declarations -- each is rendered by recursing into this same method, so
-        arbitrarily general declaration programs display correctly.
+        Input and output items are highlighted inline in the rule bodies (the
+        printer colors them by role -- inputs violet, outputs gold -- via
+        `_io_roles`; see `dyna.pretty`).  When `types` is true and the program
+        carries input and/or output declarations, those are appended in a single
+        collapsible `<details>` block (collapsed by default, so it stays out of
+        the way until expanded).  Because `inputs`/`outputs` are themselves
+        `Program`s -- which may carry rule bodies, delayed constraints, and even
+        their own declarations -- each is rendered by recursing into this same
+        method, so arbitrarily general declaration programs display correctly.
         """
         html = self._html_code_block()
         if types and (self.inputs or self.outputs):
             html += self._html_types_section()
         return html
 
-    def _highlight_io(self, r, input_color, output_color):
-        """Return a copy of rule `r` with its input/output items colored.
+    def _io_roles(self, r):
+        """Map `id(item) -> 'input'/'output'` for rule `r`'s head and body items.
 
-        Input items are wrapped in `input_color`, outputs in `output_color`
-        (each a printf-style template -- the HTML span or ANSI escape, depending
-        on the view).  Items are colored wherever they appear: the rule head
-        (outputs are typically heads, so this is what makes them visible) as
-        well as the body subgoals.  The functor is wrapped in an `Escape` (which
-        `pp` emits verbatim) so the arguments still pretty-print normally;
-        arity-0 items are emitted as a bare `Escape` to avoid a spurious
-        `foo()`.  Returns `r` unchanged when it has no input or output items.
+        Passed to `pp` as `roles` so the pretty-printer colors declared inputs
+        and outputs wherever they appear -- the rule head (outputs are typically
+        heads, so this is what makes them visible) as well as the body subgoals
+        -- by role, without the rule itself being rewritten (see
+        `PrettyPrinter.pp_role_term`).  Returns an empty dict when `r` has no
+        input or output items.
         """
-        def hl(y):
-            "Color y's functor if y is an input/output item; return (new_y, changed)."
-            template = None
+        roles = {}
+        for y in (r.head, *r.body):
             if isinstance(y, Term):
-                if   self.is_input(y):  template = input_color
-                elif self.is_output(y): template = output_color
-            if template is None:
-                return y, False
-            colored = template % str(snap(y.fn))
-            return (Term(Escape(colored), *y.args) if y.args else Escape(colored)), True
-
-        head, changed = hl(r.head)
-        body = []
-        for y in r.body:
-            new_y, c = hl(y)
-            changed = changed or c
-            body.append(new_y)
-        return Rule(head, *body) if changed else r
+                if   self.is_input(y):  roles[id(y)] = 'input'
+                elif self.is_output(y): roles[id(y)] = 'output'
+        return roles
 
     def _html_code_block(self):
         "The line-numbered, syntax-colored block of rules, inputs/outputs highlighted."
@@ -295,7 +272,7 @@ class Program:
                 ' font-size: 14px; padding: 5px; color: #999;">(no rules)</div>'
             )
         linenums = '<br>'.join(map(str, range(len(self))))
-        code = '<br/>'.join(pp(self._highlight_io(r, self.html_input_color, self.html_output_color), color='html')
+        code = '<br/>'.join(pp(r, color='html', roles=self._io_roles(r))
                             + '<span style="color: blue;">.</span>' for r in self)
         return f"""\
 <div style="display: flex; font-family: monospace; border: 1px solid #eee; font-size: 14px !important; text-align: left !important; overflow-x: auto;">\
@@ -312,8 +289,8 @@ class Program:
         displays correctly to arbitrary depth.
         """
         parts = []
-        for label, prog, color in [('inputs', self.inputs, self.html_input_color),
-                                   ('outputs', self.outputs, self.html_output_color)]:
+        for label, prog, color in [('inputs', self.inputs, html_colors.input),
+                                   ('outputs', self.outputs, html_colors.output)]:
             if not prog: continue
             parts.append(
                 f'<div style="padding: 3px 0;">{color % (label + ":")}</div>'
@@ -434,6 +411,7 @@ input/output declarations</summary>\
             s = self.rules[i]
             [S] = s.body
             self.rules[i] = Rule(s.head, S + C)
+            self._invalidate_caches()   # rules[i] changed in place; keep the if-branch invariant
             return i
 
     # Warning: this function just creates an index; it does not merge rules; the
@@ -480,7 +458,7 @@ input/output declarations</summary>\
         # Clear in place rather than reallocating: `_add_rule` calls this on
         # every append, and the append-heavy hot loops (`step`, `agenda`,
         # `seminaive`, `newton`) would otherwise churn a fresh object per rule.
-        self._caches._caches.clear()   # degrees, prune*, ...
+        self._caches.clear()   # degrees, prune*, ...
 
     def _add_rule(self, r):
         i = len(self.rules)
@@ -1175,32 +1153,29 @@ input/output declarations</summary>\
             q[r.head] = chart[r.body]
         return q
 
+    def groundings(self, chart=None):
+        "Yield a `Grounding(i, rule, value)` for each rule firing against `chart`."
+        if chart is None: chart = self.agenda()
+        for i, r in enumerate(self.rules):
+            with self._fresh(r) as r:
+                for v in chart[r.body]:
+                    gr, gv = fresh((r, v))
+                    gr.i = i   # structural rule-index invariant (every program rule carries `.i`)
+                    yield Grounding(i, gr, gv)
+
     def instantiate(self, chart=None):
         "Instantiate program rules against chart."
         if chart is None: chart = self.agenda()
         G = self.spawn()
         #G.inputs = chart.inputs
-        for i, r in enumerate(self.rules):
-            with self._fresh(r) as r:
-                for v in chart[r.body]:
-                    gr, gv = fresh((r, v))
-                    gr.i = i
-                    gr._contrib_value = gv
-                    G.rules.append(gr)
+        for g in self.groundings(chart):
+            G.rules.append(g.rule)
         G.inputs = chart.inputs
         return G
 
-    def show_groundings(self, chart=None, precision=None):
-        "Show instantiations of program rules against chart."
-        if chart is None: chart = self.agenda()
-        for i, r in enumerate(self.rules):
-            print(colors.render(colors.dark.magenta % f'# {i}: {r.__repr__(color=False)}'))
-            with self._fresh(r) as r:
-                for v in chart[r.body]:
-                    if isinstance(v, tuple) and len(v) >= 1: v = np.prod(v)
-                    if precision is not None: v = round(v, precision)
-                    pre = colors.magenta % f'{v}:'
-                    print(f'{pre} {r}')
+    def show_groundings(self, chart=None):
+        "Pretty-print this program's groundings against `chart` (terminal or notebook)."
+        return GroundingsPrinter(self, chart)
 
     def multiple(self, r):
         """

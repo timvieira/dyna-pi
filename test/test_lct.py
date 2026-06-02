@@ -502,7 +502,7 @@ def test_slash_nonitem():
     """)
     q = p.lct({0:0}, x='z')   # z is not in the program
     d = q.agenda()
-    q.show_groundings(d)
+    str(q.show_groundings(d))    # TODO: make this slightly less of a smoke test
     d.assert_equal_query('goal', 13)
 
 #_______________________________________________________________________________

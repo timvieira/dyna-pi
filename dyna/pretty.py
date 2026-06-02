@@ -62,34 +62,50 @@ class Escape:
         return self.x
 
 
+import arsenal
+
+
+# Color palettes for the three render targets, keyed by semantic role: the
+# printer asks for `self.color.variable` / `.aggregator` / `.builtin`, and (via
+# the `roles` map, see `PrettyPrinter`) `.input` / `.output`.  Adding a role
+# means adding one line to each backend, and the views stay in lockstep.  Inputs
+# and outputs are the two poles of a diverging pair -- violet and gold; the HTML
+# and ANSI definitions use the same hex so `_repr_html_` and `__repr__` color
+# items identically.
 class html_colors:
-    magenta = '<span style="color: #aa6699;">%s</span>'
-    blue = '<span style="color: blue;">%s</span>'
-    red = '<span style="color: red;">%s</span>'
-    green = '<span style="color: green;">%s</span>'
-    render = lambda x: x
+    variable   = '<span style="color: green;">%s</span>'
+    aggregator = '<span style="color: blue;">%s</span>'
+    builtin    = '<span style="color: #aa6699;">%s</span>'
+    input      = '<span style="color: #7b2fbe;">%s</span>'   # violet
+    output     = '<span style="color: #d4a017;">%s</span>'   # gold
+    render     = lambda x: x
 
 
 class no_colors:
-    magenta = '%s'
-    blue = '%s'
-    red = '%s'
-    green = '%s'
+    variable = aggregator = builtin = input = output = '%s'
     render = lambda x: x
 
 
-import arsenal
-ansi_colors = arsenal.colors
+class ansi_colors:
+    variable   = arsenal.colors.green
+    aggregator = arsenal.colors.blue
+    builtin    = arsenal.colors.magenta
+    input      = arsenal.colors.rgb(0x7b, 0x2f, 0xbe)        # violet #7b2fbe
+    output     = arsenal.colors.rgb(0xd4, 0xa0, 0x17)        # gold   #d4a017
+    render     = arsenal.colors.render
 
 
 class PrettyPrinter:
     "Stateful pretty printer."
 
-    def __init__(self, vs=None, color=True, **kwargs):
+    def __init__(self, vs=None, color=True, roles=None, **kwargs):
         if vs is None: vs = {}
         self.vs = vs
         self.kwargs = kwargs
         self.var_color = {}
+        # `roles` maps id(subgoal) -> 'input'/'output' so the printer can color
+        # those items by role (see `pp_role_term`) without the rule being rewritten.
+        self.roles = roles or {}
         self.color = None
         self.set_color(color)
 
@@ -163,7 +179,7 @@ class PrettyPrinter:
             local = bs - hs
 
             for v in term_vars(x):
-                self.var_color[id(v)] = self.color.green
+                self.var_color[id(v)] = self.color.variable
 
 #            for v in (hs | bs): self.var_color[id(v)] = colors.white
 #            for v in local:     self.var_color[id(v)] = self.color.green
@@ -182,7 +198,6 @@ class PrettyPrinter:
 
                 def wrap(z):
                     if isinstance(z, Rule): return parens(z)
-                    if isinstance(z, Escape): return z   # already rendered; emit verbatim
                     if not isinstance(z, (Var, Term)):
 #                        if hasattr(z, 'fsa'):
 #                            return Escape(f'<div style="display: inline; border:thin solid red;">{z.fsa.min()._repr_html_()}</div>')
@@ -191,7 +206,7 @@ class PrettyPrinter:
 #                        elif hasattr(z, '_repr_svg_'):
 #                            return z._repr_svg_()
 #                        else:
-                        return Escape(self.color.render(self.color.magenta % (z,)))
+                        return Escape(self.color.render(self.color.builtin % (z,)))
 
                     return z
 
@@ -199,17 +214,35 @@ class PrettyPrinter:
                 for i in range(1, len(x.body)):
                     B = Term('*', B, wrap(x.body[i]))
 
-                aggr = self.color.blue % '+='
+                aggr = self.color.aggregator % '+='
 
                 return f'{pre}{h} {aggr} {self(B)}'
             else:
                 return f'{pre}{h}'
 
         elif isinstance(x, Term):
+            role = self.roles.get(id(x))
+            if role is not None:
+                return self.pp_role_term(x, role)
             return self.pp_term(x)
 
         else:
             return repr(x)
+
+    def pp_role_term(self, x, role):
+        """Render term `x` with its functor colored by `role` ('input'/'output').
+
+        Only the functor is colored; the arguments pretty-print normally.  An
+        arity-0 item renders as just the colored functor (no spurious `foo()`).
+        Used for declared inputs/outputs tagged in `self.roles` -- see
+        `Program._io_roles`.
+        """
+        color = getattr(self.color, role)
+        fn = snap(x.fn)
+        f = color % (self.pp_functor(fn) if isinstance(fn, str) else self(fn))
+        if x.args:
+            return f'{f}({",".join(self(a) for a in x.args)})'
+        return f
 
     def pp_term(self, x):
         x = snap(x)
