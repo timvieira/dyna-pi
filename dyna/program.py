@@ -952,15 +952,21 @@ input/output declarations</summary>\
 
         bound_program = p.magic_templates() if magic else p
 
-        # Only pick a solver when the caller didn't.  Pass 1's solver1 cannot
-        # enumerate unbound head variables, so it is only safe when the bound
-        # boolean program is range-restricted. (With `magic=True` the magic
-        # guard binds the head vars, keeping it range-restricted.)
-        if solver is None:
-            solver = 1 if bound_program.is_range_restricted() else 2
-        solver = Program.solver if solver == 1 else Program.solver2
+        # Choose a solver PER PASS, from the program that pass actually runs:
+        # pass 1 runs `bound_program` (the magic/boolean program), pass 2 runs
+        # `p` (the original, weighted program). These can differ in range-
+        # restrictedness -- `magic_templates` adds demand guards that bind head
+        # vars, so the magic program is range-restricted even when `p` is not.
+        # solver1 cannot enumerate unbound head variables, so it is safe only on
+        # a range-restricted program; choosing once from `bound_program` would
+        # wrongly pick solver1 for a non-range-restricted `p` in pass 2 (which
+        # then raises on the unbound head vars). An explicit `solver=` overrides
+        # both passes.
+        def _solver_for(prog):
+            s = solver if solver is not None else (1 if prog.is_range_restricted() else 2)
+            return Program.solver if s == 1 else Program.solver2
 
-        s1 = solver((bound_program + data).booleanize())
+        s1 = _solver_for(bound_program)((bound_program + data).booleanize())
         s1(budget=budget, throw=False)
 
         def deps(x):
@@ -988,7 +994,7 @@ input/output declarations</summary>\
         support_map = {k: i + 1 for k, i in scc.items()}
         support = Program([Rule(k, i + 1) for k, i in scc.items()])
 
-        s2 = solver(p + data, AgendaType=BucketQueue)
+        s2 = _solver_for(p)(p + data, AgendaType=BucketQueue)
 
         def priority(it):
             if not isinstance(it, Term) or p.is_exogenous(it):
