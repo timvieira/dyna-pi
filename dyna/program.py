@@ -678,6 +678,7 @@ input/output declarations</summary>\
         "Compare rules in the program side by side."
         print(self._compare(other, **kwargs))
 
+    # TODO: it's bad that we are ignoring the precision argument here -- what do we want instead?
     def _compare(self, other, precision=None):
         "Compare rules in the program side by side."
         if isinstance(other, str): other = Program(other)
@@ -812,9 +813,7 @@ input/output declarations</summary>\
         # Only pick a solver when the caller didn't.  solver1 is faster but
         # cannot enumerate unbound head variables, so it is only safe on
         # range-restricted programs; everything else needs solver2.
-        if solver is None:
-            solver = 1 if self.is_range_restricted() else 2
-        s = self.solver(**kwargs) if solver == 1 else self.solver2(**kwargs)
+        s = self._solver_for(solver)(self, **kwargs)
         s(data, budget=budget, throw=throw, kill=kill)
         return s
 
@@ -858,6 +857,23 @@ input/output declarations</summary>\
     def is_range_restricted(self):
         "True iff every variable in each rule's head also appears in its body."
         return all(not (term_vars(r.head) - term_vars(r.body)) for r in self.rules)
+
+    def _solver_for(self, solver=None):
+        """Pick the solver *constructor* appropriate for this program.
+
+        `solver=1` forces forward chaining (`Program.solver`); `solver=2`
+        forces the non-range-restricted solver (`Program.solver2`); `None`
+        auto-selects: solver1 is faster but cannot enumerate unbound head
+        variables, so it is only safe on range-restricted programs.
+
+        Returns the (unbound) constructor rather than an instance so the
+        caller can choose *which* program to instantiate it on -- this can
+        differ from `self`, the program used to make the decision (see the
+        two passes of `scc_solver`).
+        """
+        if solver is None:
+            solver = 1 if self.is_range_restricted() else 2
+        return Program.solver if solver == 1 else Program.solver2
 
     # TODO: add the precision option like agenda.
     def fc(self, *, max_iter=None, chart=None, verbose=False, proj=lambda p: p):
@@ -961,12 +977,8 @@ input/output declarations</summary>\
         # a range-restricted program; choosing once from `bound_program` would
         # wrongly pick solver1 for a non-range-restricted `p` in pass 2 (which
         # then raises on the unbound head vars). An explicit `solver=` overrides
-        # both passes.
-        def _solver_for(prog):
-            s = solver if solver is not None else (1 if prog.is_range_restricted() else 2)
-            return Program.solver if s == 1 else Program.solver2
-
-        s1 = _solver_for(bound_program)((bound_program + data).booleanize())
+        # both passes (see `_solver_for`).
+        s1 = bound_program._solver_for(solver)((bound_program + data).booleanize())
         s1(budget=budget, throw=False)
 
         def deps(x):
@@ -994,7 +1006,7 @@ input/output declarations</summary>\
         support_map = {k: i + 1 for k, i in scc.items()}
         support = Program([Rule(k, i + 1) for k, i in scc.items()])
 
-        s2 = _solver_for(p)(p + data, AgendaType=BucketQueue)
+        s2 = p._solver_for(solver)(p + data, AgendaType=BucketQueue)
 
         def priority(it):
             if not isinstance(it, Term) or p.is_exogenous(it):
