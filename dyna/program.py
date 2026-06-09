@@ -945,7 +945,7 @@ input/output declarations</summary>\
         tp.magic_fn = magic_fn
         return tp
 
-    def scc_solver(self, *, solver=None, magic=True, data='', budget=None):
+    def scc_solver(self, *, solver=None, magic=False, data='', budget=None):
         """Goal-directed, two-pass evaluator.
 
         Pass 1 runs in the Boolean semiring to build an SCC toposort index
