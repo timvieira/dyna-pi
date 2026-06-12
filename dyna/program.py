@@ -1790,6 +1790,14 @@ input/output declarations</summary>\
         #if types is None: types = self.usefulness_analysis()
         return Abbreviate(self, types, **kwargs)
 
+    def normalize_range_restriction(self, **kwargs):
+        """Rewrite into an equivalent program whose non-range-restriction is
+        confined to an explicit residual output layer (see
+        docs/range-restriction-normalization.md); pass `adom=<functor>` to
+        remove the residue over an active domain."""
+        from dyna.transform.range_restriction import RangeRestrictionNormalization
+        return RangeRestrictionNormalization(self, **kwargs)
+
     #___________________________________________________________________________
     # Program normalization
 

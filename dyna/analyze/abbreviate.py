@@ -28,10 +28,16 @@ def freebies(r):
 
 class Abbreviate(TransformedProgram):
 
-    def __init__(self, program, types, debug=False):
+    def __init__(self, program, types, debug=False, adom=None):
 
         self.parent = program
         self.types = types
+        # Active-domain mode (range-restriction-normalization.md, Step E):
+        # when `adom` names a domain predicate, a lost free variable V is
+        # re-bound by splicing `adom(V)` instead of attaching the
+        # Semiring.multiple(inf) witness factor, so the witness count is
+        # |adom| rather than inf.
+        self.adom = adom
 
         self.types.chart = self.types.chart.sort()   # for stability in test cases
         del types
@@ -106,9 +112,17 @@ class Abbreviate(TransformedProgram):
 
     def __dropped_var_correction(self, body_closure, new_rule, debug):
         # apply the multiplicity correction if a free local variable is lost
-        if freebies(body_closure) - snap_vars(body_closure.head) != freebies(new_rule) - snap_vars(new_rule.head):
+        before = freebies(body_closure) - snap_vars(body_closure.head)
+        after = freebies(new_rule) - snap_vars(new_rule.head)
+        if before != after:
             if debug: print(colors.light.red % 'VARS CHANGED!')
-            new_rule = Rule(new_rule.head, *new_rule.body, self.parent.Semiring.multiple(float('inf')))
+            if self.adom is not None:
+                # re-bind each lost variable over the active domain; the
+                # witness count becomes |adom| instead of inf
+                lost = sorted(before - after, key=str)
+                new_rule = Rule(new_rule.head, *new_rule.body, *[Term(self.adom, v) for v in lost])
+            else:
+                new_rule = Rule(new_rule.head, *new_rule.body, self.parent.Semiring.multiple(float('inf')))
         return new_rule
 
     def __abbrev(self, t):
