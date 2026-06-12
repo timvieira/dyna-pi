@@ -550,9 +550,13 @@ shared `X0` into two independent variables.
   `RangeRestrictionNormalization(program, adom=None)`, also reachable as
   `Program.normalize_range_restriction(...)`.  Steps B-C run on `Abbreviate`;
   dead recovery rules are removed by `prune_very_fast` (reachability from the
-  outputs), which is load-bearing: a pruned recovery rule is exactly one whose
-  imprecision is unobservable.  Step D exposes `residual_layer` and
-  `engine_layer` (both `Program`s).  Step E (`adom=<functor>`) splices
+  outputs), which is load-bearing for *confinement* rather than soundness:
+  recovery rules are always value-exact (only pass-through openness is
+  projected), but a dead one is non-range-restricted and would pollute the
+  residual layer's output-feeding form (DoD #3).  Step D exposes
+  `residual_layer` and `engine_layer` (both `Program`s).  An explicit
+  `input_type` (e.g. `h(X) += $free(X).`) seeds the first pass with
+  open-by-declaration inputs (Section 3.1).  Step E (`adom=<functor>`) splices
   `adom(V)` for every remaining unbindable variable and declares `adom(_)` an
   input; inside `Abbreviate`, the dropped-var correction emits `adom(V)` for
   each lost variable instead of `Semiring.multiple(inf)`, so witness counts

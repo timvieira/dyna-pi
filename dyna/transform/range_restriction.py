@@ -20,9 +20,11 @@ implemented on the projection machinery of `Abbreviate`:
                                    counts become |adom|; residue empties)
 
 Dead recovery rules — recovery rules whose original item no consumer reads and
-that feed no output — are removed by reachability pruning; this is load-bearing
-for soundness bookkeeping, not just hygiene (a pruned recovery rule is exactly
-one whose possible imprecision is unobservable).
+that feed no output — are removed by reachability pruning.  Recovery rules are
+always value-exact (only pass-through openness is ever projected), so pruning
+is load-bearing for *confinement*, not soundness: a dead recovery rule is
+non-range-restricted, and left in place it would pollute the residual layer
+and break its output-feeding form (DoD #3).
 
 Irreducibility caveat (spec Section 6): without `adom`, the residual layer is
 non-empty whenever a free variable reaches an output, and a rule whose head
@@ -41,17 +43,28 @@ from dyna.analyze.range_restriction import (
 
 class RangeRestrictionNormalization(TransformedProgram):
 
-    def __init__(self, program, adom=None, max_passes=4, prune=True):
+    def __init__(self, program, adom=None, input_type=None, max_passes=4, prune=True):
         self.adom = adom
         # the active domain is a new input relation: the user supplies it
         adom_input = Program(f'{adom}(_).') if adom is not None else None
 
+        if input_type is not None and input_type.inputs is None:
+            # a user-supplied input type may omit its own type parameters;
+            # Abbreviate requires them to be declared (possibly empty)
+            input_type = input_type.set_input_types(Program([]))
+
         q = program
-        for _ in range(max_passes):
+        for i in range(max_passes):
             # Stop when the only rules left that fail the refined
             # range-restriction check are residue: recovery/open rules whose
             # openness is irreducible without an active domain.
-            types = q.type_analysis()
+            #
+            # `input_type` (Section 3.1): input types may declare a position
+            # open by `$free` — a Step A base case with no deriving rule.  It
+            # describes the *original* inputs, so it seeds the first pass
+            # only; later passes see the abbreviated inputs that Abbreviate
+            # installs via set_input_types.
+            types = q.type_analysis(input_type=input_type if i == 0 else None)
             if not open_types(q, types=types): break
             new = q.abbreviate(types=types, adom=adom)
             if adom is not None:

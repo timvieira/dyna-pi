@@ -430,6 +430,23 @@ def test_DoD2_equivalence_geom():
     qs.assert_equal_query('x(j)', ps.user_query('x(j)'))
 
 
+def test_M3_input_declared_open_transform():
+    # Section 3.1 through the transform: an input type declaring h's position
+    # $free is a Step A base case with no deriving rule; the summing consumer
+    # gets the inf witness factor and the engine layer is range-restricted
+    p = Program("""
+    goal += h(X).
+    inputs: h(X).
+    outputs: goal.
+    """)
+    q = p.normalize_range_restriction(input_type=Program('h(X) += $free(X).'))
+    assert q.residual_layer.rules == []
+    assert is_range_restricted(q.engine_layer)
+    D = 'h(X) += 5.'   # the open input fact the declaration promised
+    ps, qs = (p + D).sol(), (q + D).sol()
+    qs.assert_equal_query('goal', ps.user_query('goal'))
+
+
 def test_DoD2_equivalence_path():
     # recursion through a reflexive open diagonal (E2's shape) consumed
     # ground at the output: the residue disappears into the engine layer
