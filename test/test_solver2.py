@@ -288,6 +288,41 @@ def test_builtins():
         Solver(p)()
 
 
+def test_builtin_constraint_dispatch():
+    # The solver must dispatch on `BuiltinConstraint` instances via their `run`
+    # method (as `Program.lookup` does), not only on the hardcoded builtin
+    # functors -- otherwise subclasses other than `NotMatchesConstraint` fall
+    # through to the chart lookup.
+    from dyna import Rule, term, BuiltinConstraint
+
+    class Succeed(BuiltinConstraint):
+        def run(self, program):
+            r = Rule(self, program.Semiring.one)
+            r.i = None
+            yield r
+
+    class Fail(BuiltinConstraint):
+        def run(self, program):
+            return
+            yield
+
+    class Delay(BuiltinConstraint):
+        def run(self, program):
+            r = Rule(self, self)
+            r.i = None
+            yield r
+
+    p = Program([
+        Rule(term('a'), Succeed('$succeed')),
+        Rule(term('b'), Fail('$fail')),
+    ])
+    Solver(p)().assert_equal('a += 1.')
+
+    p = Program([Rule(term('c'), Delay('$delay'))])
+    with assert_throws(InstFault):
+        Solver(p)()
+
+
 def test_budgets():
     from arsenal.robust import Timeout
     from arsenal.assertions import assert_throws
