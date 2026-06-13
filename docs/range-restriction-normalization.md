@@ -599,9 +599,8 @@ of this feature only because the spec transform calls it.
 
 | module | role | status |
 |---|---|---|
-| `dyna/analyze/range_restriction.py` | the refined range-restriction check (`bindable_vars`, `is_rule_range_restricted`, `open_types`) | shared analysis, used by both transforms below |
+| `dyna/analyze/range_restriction.py` | **(1)** the refined range-restriction check (`bindable_vars`, `is_rule_range_restricted`, `open_types`); **(2)** the **sound** normalization (`phantom_paths`, `PhantomProjection`, `ValueSplit`, `RangeRestrictionNormalizer`) — next to `abbreviate` | the check is shared; the sound normalizer is provably-sound + invariant but not the entry point — the trustworthy alternative (§9.1) |
 | `dyna/transform/range_restriction.py` | `RangeRestrictionNormalization` — the spec deliverable, built on `abbreviate` | **canonical**: `Program.normalize_range_restriction` routes here; meets the DoD; inherits abbreviate's substrate (see the startpath3 caveat in §9.1) |
-| `dyna/analyze/range_restriction_normalize.py` | the **sound** alternative (next to `abbreviate`): `phantom_paths` analysis, `PhantomProjection`, `ValueSplit`, and the `RangeRestrictionNormalizer` entry | provably-sound + invariant projection gate; not wired as the entry point; kept as the trustworthy alternative (§9.1) |
 
 **Frontier (not done):** the sound module is conservative — it refuses (soundly,
 unprojected) the diagonal value-split (`q(X,X)`/`q(X,Y)`), recursive overlap,
@@ -640,7 +639,7 @@ type, losing the equality. The spec transform avoids this only because
 preserves the diagonal on the cases tested — it dodges the bug, it does not
 defeat it.
 
-`dyna/analyze/range_restriction_normalize.py` (§8.2) is the response: a
+The sound normalizer in `dyna/analyze/range_restriction.py` (§8.2) is the response: a
 projection gate that is sound *by a verifiable condition* (single-occurrence
 excludes diagonals structurally) rather than by the merge heuristic, validated
 sound on startpath3 and ~2000 randomized differential programs. It is

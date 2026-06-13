@@ -1,6 +1,6 @@
 """
-Tests for the consolidated sound range-restriction normalization
-(dyna/analyze/range_restriction_normalize.py).
+Tests for the sound range-restriction normalization
+(the normalization half of dyna/analyze/range_restriction.py).
 
 Covers the three layers: the phantom analysis (sound + invariant), the phantom
 projection, the value-split (constant-overlap), and the combined normalizer.
@@ -10,7 +10,7 @@ reflexive diagonal `path(I,I)` (all-zero paths); this refuses to project it.
 
 from dyna import Program
 from dyna.analyze.range_restriction import is_range_restricted
-from dyna.analyze.range_restriction_normalize import (
+from dyna.analyze.range_restriction import (
     phantom_paths, PhantomProjection, ValueSplit, RangeRestrictionNormalizer,
 )
 
