@@ -540,13 +540,17 @@ shared `X0` into two independent variables.
 
 ### 8.1 Implementation (as built)
 
-- `dyna/analyze/range_restriction.py` — Step A: `open_types(program)` (the
-  `$free`-marked derivable types, via the standard type analysis), plus the
-  refined check: `bindable_vars(program, rule)` (the per-rule dataflow —
-  variables of non-builtin subgoals, closed bidirectionally through the binder
-  builtins `=`/`is`; tests bind nothing) and
-  `is_rule_range_restricted` / `is_range_restricted`.
-- `dyna/transform/range_restriction.py` —
+Everything range-restriction lives in **one module, `dyna/analyze/range_restriction.py`**
+(next to `abbreviate.py`, mirroring it): the refined check, the spec transform,
+and the sound normalizer.
+
+- The refined check — Step A: `open_types(program)` (the `$free`-marked
+  derivable types, via the standard type analysis), plus
+  `bindable_vars(program, rule)` (the per-rule dataflow — variables of
+  non-builtin subgoals, closed bidirectionally through the binder builtins
+  `=`/`is`; tests bind nothing) and `is_rule_range_restricted` /
+  `is_range_restricted`.
+- The spec transform —
   `RangeRestrictionNormalization(program, adom=None, input_type=None)`, also
   reachable as `Program.normalize_range_restriction(...)`.  **Single pass, no
   outer loop:** `type_analysis` already computes the *transitive* openness
@@ -597,10 +601,18 @@ There are two normalization implementations, by design. **`abbreviate`
 general type-specialization transform used by CKY/geom/benchmarks — and is part
 of this feature only because the spec transform calls it.
 
-| module | role | status |
+Everything range-restriction is in **one module**, `dyna/analyze/range_restriction.py`,
+next to `abbreviate.py` (which is likewise a single analyze-module transform).
+It holds three things:
+
+| in `dyna/analyze/range_restriction.py` | role | status |
 |---|---|---|
-| `dyna/analyze/range_restriction.py` | **(1)** the refined range-restriction check (`bindable_vars`, `is_rule_range_restricted`, `open_types`); **(2)** the **sound** normalization (`phantom_paths`, `PhantomProjection`, `ValueSplit`, `RangeRestrictionNormalizer`) — next to `abbreviate` | the check is shared; the sound normalizer is provably-sound + invariant but not the entry point — the trustworthy alternative (§9.1) |
-| `dyna/transform/range_restriction.py` | `RangeRestrictionNormalization` — the spec deliverable, built on `abbreviate` | **canonical**: `Program.normalize_range_restriction` routes here; meets the DoD; inherits abbreviate's substrate (see the startpath3 caveat in §9.1) |
+| the refined check (`bindable_vars`, `is_rule_range_restricted`, `open_types`) | shared analysis used by both transforms below | — |
+| `RangeRestrictionNormalization` — the spec transform, built on `abbreviate` | **canonical**: `Program.normalize_range_restriction` routes here; meets the DoD | inherits abbreviate's substrate (the startpath3 caveat, §9.1) |
+| the **sound** normalizer (`phantom_paths`, `PhantomProjection`, `ValueSplit`, `RangeRestrictionNormalizer`) | provably-sound + invariant projection | not the entry point; the trustworthy alternative (§9.1) |
+
+`abbreviate` (`dyna/analyze/abbreviate.py`) is untouched pre-existing
+infrastructure, used here only because the spec transform calls it.
 
 **Frontier (not done):** the sound module is conservative — it refuses (soundly,
 unprojected) the diagonal value-split (`q(X,X)`/`q(X,Y)`), recursive overlap,

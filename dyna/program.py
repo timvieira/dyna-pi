@@ -1795,7 +1795,7 @@ input/output declarations</summary>\
         confined to an explicit residual output layer (see
         docs/range-restriction-normalization.md); pass `adom=<functor>` to
         remove the residue over an active domain."""
-        from dyna.transform.range_restriction import RangeRestrictionNormalization
+        from dyna.analyze.range_restriction import RangeRestrictionNormalization
         return RangeRestrictionNormalization(self, **kwargs)
 
     #___________________________________________________________________________

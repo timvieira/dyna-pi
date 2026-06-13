@@ -13,7 +13,7 @@ from dyna.analyze.range_restriction import (
     open_types, has_free, bindable_vars,
     is_rule_range_restricted, is_range_restricted,
 )
-from dyna.transform.range_restriction import RangeRestrictionNormalization
+from dyna.analyze.range_restriction import RangeRestrictionNormalization
 
 
 def E1():
