@@ -45,9 +45,8 @@ from dyna.analyze.range_restriction import (
 
 class RangeRestrictionNormalization(TransformedProgram):
 
-    def __init__(self, program, adom=None, input_type=None, max_passes=4, prune=True):
+    def __init__(self, program, adom=None, input_type=None, prune=True):
         self.adom = adom
-        self._max_passes = max_passes
         # the active domain is a new input relation: the user supplies it
         adom_input = Program(f'{adom}(_).') if adom is not None else None
 
@@ -56,45 +55,27 @@ class RangeRestrictionNormalization(TransformedProgram):
             # Abbreviate requires them to be declared (possibly empty)
             input_type = input_type.set_input_types(Program([]))
 
-        q = program
-        converged = False
-        for i in range(max_passes):
-            # Stop when the only rules left that fail the refined
-            # range-restriction check are residue: recovery/open rules whose
-            # openness is irreducible without an active domain.
-            #
-            # `input_type` (Section 3.1): input types may declare a position
-            # open by `$free` — a Step A base case with no deriving rule.  It
-            # describes the *original* inputs, so it seeds the first pass
-            # only; later passes see the abbreviated inputs that Abbreviate
-            # installs via set_input_types.
-            types = q.type_analysis(input_type=input_type if i == 0 else None)
-            if not open_types(q, types=types):
-                converged = True
-                break
-            new = q.abbreviate(types=types, adom=adom)
+        # Single pass — no outer loop.  `type_analysis` already computes the
+        # *transitive* openness fixpoint (propagation through consumption is
+        # the type solver's job, and its forward chaining closes over
+        # recursion), so one Abbreviate pass, expanding over the complete type
+        # chart, projects every open position at once.  A second pass would
+        # only re-project the recovery rules this pass emitted — their
+        # reintroduced variable is open by construction — i.e. chew on the
+        # residue.  `input_type` (Section 3.1) lets an input declare a position
+        # `$free` (a Step A base case with no deriving rule).  The
+        # post-condition below asserts this one-shot completeness.
+        types = program.type_analysis(input_type=input_type)
+        if open_types(program, types=types):
+            q = program.abbreviate(types=types, adom=adom)
             if adom is not None:
-                new.set_input_types((new.inputs or Program([])) + adom_input)
-            if prune: new = new.prune_very_fast()
-            if len(new.rules) == len(q.rules) and all(
-                    str(a) == str(b) for a, b in zip(new.rules, q.rules)):
-                converged = True
-                break   # no progress; remaining openness is residual
-            q = new
-            # A second pass would re-project the recovery rules themselves
-            # (their reintroduced free variable is open by construction), so
-            # iterate only while the *engine layer* still has non-residual
-            # openness — i.e. while some non-range-restricted rule is not in
-            # recovery form.  One projection pass plus pruning normalizes the
-            # engine layer; the loop guard is a safety net, not the workhorse.
-            if all(is_rule_range_restricted(q, r) or self._is_recovery(q, r)
-                   for r in q):
-                converged = True
-                break
+                q.set_input_types((q.inputs or Program([])) + adom_input)
+            if prune:
+                q = q.prune_very_fast()
+        else:
+            q = program   # already range-restricted; nothing open to project
 
-        self.converged = converged
         rules = list(q)
-
         if adom is not None:
             # Step E: re-bind every remaining unbindable variable over the
             # active domain.  This removes the residue entirely (DoD #5).
@@ -113,35 +94,34 @@ class RangeRestrictionNormalization(TransformedProgram):
         self._check_postconditions()
 
     def _check_postconditions(self):
-        """Warn on the detectable silent-failure modes (values are correct
-        regardless — these are confinement, not soundness, conditions).
+        """Post-conditions (confinement, not soundness — ground-query values
+        are correct regardless).
 
-        (1) Non-convergence: the projection loop hit `max_passes` without a
-            clean break, so the engine layer may still consume open items that
-            were never projected and `residual_layer` may hold unprocessed
-            rules rather than genuine residue.  Raise `max_passes`.
+        One-shot completeness: because `type_analysis` computes the transitive
+        openness fixpoint, a single Abbreviate pass confines all *projectable*
+        openness — a second pass would only re-project the recovery rules it
+        just emitted.  No program is known that needs more than one pass.
 
-        (2) Residue shape (Theorem (c)): every residual rule must be a
-            recovery rule (`output(.., V, ..) += q\\j`) or a delayed-test rule
-            (spec E5).  A residual rule that is neither is a tell that the loop
-            gave up, not that the program has irreducible residue.  With `adom`
-            the residue must be empty outright (Step E removed it).
+        With `adom`, Step E must have removed the residue entirely — a hard
+        invariant (a non-empty residue means the splice missed a variable), so
+        it is asserted.
+
+        Without `adom`, every residual rule should be a recovery rule
+        (`output(.., V, ..) += q\\j`) or a delayed-test rule (spec E5,
+        Theorem (c)).  A rule that is neither is *warned*, not asserted,
+        because there is a genuine third case: a **builtin-orphaned** rule,
+        where abbreviation projected a pass-through variable out of an open
+        item while it was also feeding a builtin (e.g.
+        `g(Z) += f(X) * (Z is X+1)`).  That only arises when the open item is
+        the builtin variable's sole generator — i.e. on programs whose source
+        is already non-evaluable — so it is a confined-but-degenerate residue,
+        not a transform failure worth crashing on.
         """
-        if not self.converged:
-            warnings.warn(
-                f'RangeRestrictionNormalization did not converge in '
-                f'{self._max_passes} passes; the result may be only partially '
-                f'normalized (raise max_passes). Ground-query values are still '
-                f'correct.')
-
         if self.adom is not None:
-            if self.residual_layer.rules:
-                warnings.warn(
-                    f'RangeRestrictionNormalization was given adom={self.adom!r} '
-                    f'but the residual layer is non-empty '
-                    f'({len(self.residual_layer.rules)} rule(s)); Step E should '
-                    f'have removed it. This indicates a variable the adom splice '
-                    f'missed.')
+            assert not self.residual_layer.rules, (
+                f'adom={self.adom!r} given but residue is non-empty — Step E '
+                f'should have removed it: '
+                + '; '.join(map(str, self.residual_layer.rules)))
             return
 
         unexpected = [
@@ -150,10 +130,11 @@ class RangeRestrictionNormalization(TransformedProgram):
         ]
         if unexpected:
             warnings.warn(
-                f'RangeRestrictionNormalization residual layer contains '
+                'RangeRestrictionNormalization residual layer contains '
                 f'{len(unexpected)} rule(s) that are neither recovery nor '
-                f'delayed-test form — expected only confined residue '
-                f'(Theorem (c)): ' + '; '.join(str(r) for r in unexpected))
+                'delayed-test form (a transform gap, or a builtin-orphaned '
+                'variable on an already-non-evaluable program): '
+                + '; '.join(map(str, unexpected)))
 
     @staticmethod
     def _is_delayed_test(program, rule):

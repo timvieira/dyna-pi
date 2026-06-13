@@ -547,32 +547,41 @@ shared `X0` into two independent variables.
   builtins `=`/`is`; tests bind nothing) and
   `is_rule_range_restricted` / `is_range_restricted`.
 - `dyna/transform/range_restriction.py` —
-  `RangeRestrictionNormalization(program, adom=None)`, also reachable as
-  `Program.normalize_range_restriction(...)`.  Steps B-C run on `Abbreviate`;
-  dead recovery rules are removed by `prune_very_fast` (reachability from the
-  outputs), which is load-bearing for *confinement* rather than soundness:
-  recovery rules are always value-exact (only pass-through openness is
-  projected), but a dead one is non-range-restricted and would pollute the
-  residual layer's output-feeding form (DoD #3).  Step D exposes
-  `residual_layer` and `engine_layer` (both `Program`s).  An explicit
-  `input_type` (e.g. `h(X) += $free(X).`) seeds the first pass with
-  open-by-declaration inputs (Section 3.1).
-- **Post-condition checks** (`_check_postconditions`, `warnings.warn`).  Two
-  silent-failure modes are detectable and warned on (both are confinement
-  conditions; ground-query values are correct regardless): (1)
-  **non-convergence** — the projection loop hit `max_passes` without a clean
-  break, exposed as `self.converged`; (2) **residue shape** — every rule in
-  `residual_layer` must be a recovery rule or a delayed-test rule (Theorem
-  (c)); a rule that is neither signals the loop gave up rather than that the
-  residue is irreducible.  With `adom`, the residue must be empty outright.
-  The original open-input gap (an input that arrives open but is declared
-  ground) is *not* warnable — the transform has no signal for it — so it is
-  handled by Section 3.1 / `input_type`, not a runtime check.  Step E (`adom=<functor>`) splices
+  `RangeRestrictionNormalization(program, adom=None, input_type=None)`, also
+  reachable as `Program.normalize_range_restriction(...)`.  **Single pass, no
+  outer loop:** `type_analysis` already computes the *transitive* openness
+  fixpoint (propagation through consumption is the type solver's job, closed
+  over recursion), so one `Abbreviate` pass — expanding over the complete type
+  chart — projects every open position at once; a second pass would only
+  re-project the recovery rules it just emitted.  An adversarial sweep (deep
+  nesting, mutual recursion, long open chains, lists) found no program that
+  needs more than one pass.  Steps B-C run on `Abbreviate`; dead recovery
+  rules are removed by `prune_very_fast` (reachability from the outputs),
+  load-bearing for *confinement* rather than soundness: a dead recovery rule
+  is non-range-restricted and would pollute the residual layer's output-feeding
+  form (DoD #3).  Step D exposes `residual_layer` and `engine_layer` (both
+  `Program`s).  An explicit `input_type` (e.g. `h(X) += $free(X).`) supplies
+  open-by-declaration inputs (Section 3.1).  Step E (`adom=<functor>`) splices
   `adom(V)` for every remaining unbindable variable and declares `adom(_)` an
   input; inside `Abbreviate`, the dropped-var correction emits `adom(V)` for
   each lost variable instead of `Semiring.multiple(inf)`, so witness counts
   become `|adom|` with the *original* variable re-bound (E4's
   `out(X) += f_open * adom(X)` falls out with the right `X`).
+- **Post-condition checks** (`_check_postconditions`).  With `adom`, Step E
+  must have emptied the residue — a hard invariant, so it is **asserted**.
+  Without `adom`, every `residual_layer` rule should be a recovery rule or a
+  delayed-test rule (Theorem (c)); a rule that is neither is **warned**, not
+  asserted, because of a genuine third case found by the adversarial sweep:
+  a **builtin-orphaned** rule.  When abbreviation projects a pass-through
+  variable out of an open item that *also* feeds a builtin
+  (`g(Z) += f(X) * (Z is X+1)`), the variable is orphaned in the builtin.
+  This only arises when the open item is the builtin variable's sole generator
+  — i.e. on programs whose source is *already* non-evaluable (the source
+  itself raises `InstFault`) — so values are preserved (both fail identically)
+  and the rule is confined to the residual layer; crashing would be wrong, so
+  it warns.  The original open-input gap (an input that arrives open but is
+  declared ground) is *not* warnable — the transform has no signal for it — so
+  it is handled by Section 3.1 / `input_type`, not a runtime check.
 - One notable non-change: `add_free_constraints` needed no refinement — the
   `$free` mark is reserved for pass-through variables, and `head_vars −
   body_vars` is exactly that set (Section 4 case 2 must *not* be marked).

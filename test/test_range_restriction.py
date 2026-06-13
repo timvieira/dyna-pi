@@ -468,37 +468,56 @@ def test_DoD2_equivalence_path():
 
 
 #_______________________________________________________________________________
-# Post-condition checks / warnings
+# Post-condition checks (one-shot completeness assertion)
 
 
-def test_postcondition_no_warning_on_clean_examples():
-    # the worked examples all converge cleanly and produce only genuine
-    # residue, so none of them should warn (no false positives)
+def test_postcondition_clean_examples_confine_in_one_pass():
+    # the single Abbreviate pass confines every example with no warnings:
+    # every residual rule is recovery- or delayed-test-form
     import warnings
     for make in [E1, E2, E3, E5, E6]:
         with warnings.catch_warnings():
             warnings.simplefilter('error')   # any warning fails the test
             q = make().normalize_range_restriction()
-            assert q.converged
-    # adom escape is also clean
-    with warnings.catch_warnings():
-        warnings.simplefilter('error')
-        E3().normalize_range_restriction(adom='adom')
-        E5().normalize_range_restriction(adom='adom')
+            assert is_range_restricted(q.engine_layer), make.__name__
+    # adom escape leaves an empty residue (its own hard assertion)
+    assert E3().normalize_range_restriction(adom='adom').residual_layer.rules == []
+    assert E5().normalize_range_restriction(adom='adom').residual_layer.rules == []
 
 
-def test_postcondition_warns_on_nonconvergence():
-    # starve the loop: max_passes=0 means it never projects, so an open
-    # program comes back unconverged and the warning fires
+def test_postcondition_warns_on_unexpected_residue():
+    # a residual rule that is neither recovery- nor delayed-test-form warns
+    # (does not crash). Inject one and re-run the check.
     import pytest
-    with pytest.warns(UserWarning, match='did not converge'):
-        q = E3().normalize_range_restriction(max_passes=0)
-    assert not q.converged
+    q = E1().normalize_range_restriction()
+    bogus = Program('bad(X) += f_0 * f_0.').rules[0]
+    q.residual_layer = q.spawn([bogus])
+    with pytest.warns(UserWarning, match='neither recovery nor delayed-test'):
+        q._check_postconditions()
+
+
+def test_builtin_orphan_warns_not_crashes():
+    # The "builtin-orphaned" case found by the adversarial hunt: a pass-through
+    # variable (X in f(X)) is projected out of the open item while it also
+    # feeds a builtin (Z is X+1), orphaning it. A second pass does NOT help
+    # (no projectable openness remains), and the SOURCE is already
+    # non-evaluable — so it must warn, not crash, and the rule is confined to
+    # the residual layer rather than silently dropped.
+    import pytest
+    src = '''
+    f(X) += 3.
+    g(Z) += f(X) * (Z is X + 1).
+    goal += g(W).
+    outputs: goal.
+    '''
+    with pytest.warns(UserWarning, match='builtin-orphaned'):
+        q = Program(src).normalize_range_restriction()
+    assert any('is' in str(r) for r in q.residual_layer.rules)
 
 
 def test_postcondition_E5_residue_is_recognized():
     # the E5 delayed-test rule is *expected* residue, so it must NOT trip the
-    # residue-shape warning even though it is non-range-restricted
+    # one-shot assertion even though it is non-range-restricted
     q = E5().normalize_range_restriction()
     [r] = q.residual_layer.rules
     assert RangeRestrictionNormalization._is_delayed_test(q, r)
