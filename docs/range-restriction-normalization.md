@@ -590,6 +590,25 @@ shared `X0` into two independent variables.
   invariance suite, and the E6 sharing canary — which the existing widening
   passes without modification).
 
+### 8.2 Module map (as built — read this first)
+
+There are two normalization implementations, by design. **`abbreviate`
+(`dyna/analyze/abbreviate.py`) is untouched pre-existing infrastructure** — a
+general type-specialization transform used by CKY/geom/benchmarks — and is part
+of this feature only because the spec transform calls it.
+
+| module | role | status |
+|---|---|---|
+| `dyna/analyze/range_restriction.py` | the refined range-restriction check (`bindable_vars`, `is_rule_range_restricted`, `open_types`) | shared analysis, used by both transforms below |
+| `dyna/transform/range_restriction.py` | `RangeRestrictionNormalization` — the spec deliverable, built on `abbreviate` | **canonical**: `Program.normalize_range_restriction` routes here; meets the DoD; inherits abbreviate's substrate (see the startpath3 caveat in §9.1) |
+| `dyna/analyze/range_restriction_normalize.py` | the **sound** alternative (next to `abbreviate`): `phantom_paths` analysis, `PhantomProjection`, `ValueSplit`, and the `RangeRestrictionNormalizer` entry | provably-sound + invariant projection gate; not wired as the entry point; kept as the trustworthy alternative (§9.1) |
+
+**Frontier (not done):** the sound module is conservative — it refuses (soundly,
+unprojected) the diagonal value-split (`q(X,X)`/`q(X,Y)`), recursive overlap,
+and nested value-splits. Its soundness is a rigorous argument, not a mechanized
+proof. The two transforms are not unified; the sound one is the basis for any
+future migration off the abbreviate substrate.
+
 ## 9. Relation to abbreviation
 
 The projected item `q_open_j` in Step B is the **abbreviated item with the open
@@ -607,6 +626,26 @@ that gate is part of M2, and once built it discharges both transforms at once.
 This retires the worry in `abbreviation-design.md` Option D (lines 2235-2244)
 that range-restriction normalization needs a *separate* semiring-preservation
 proof: it does not — it shares abbreviation's.
+
+### 9.1 The startpath3 caveat (why the phantom line exists)
+
+Sharing abbreviation's projection means sharing its soundness boundary, and
+that boundary is **not sound everywhere**. `test_abbreviate.py::todo_startpath3`
+is a checked-in counterexample: abbreviating the reflexive-transitive closure
+against refined usefulness types **drops the diagonal base `path(I,I)`** and
+computes all-zero paths. The mechanism is the `ALLOW_FREE_MERGE` projectability
+decision merging the diagonal (`I=I`) into the general (independent-positions)
+type, losing the equality. The spec transform avoids this only because
+`Program.normalize_range_restriction` uses the *plain* type analysis, which
+preserves the diagonal on the cases tested — it dodges the bug, it does not
+defeat it.
+
+`dyna/analyze/range_restriction_normalize.py` (§8.2) is the response: a
+projection gate that is sound *by a verifiable condition* (single-occurrence
+excludes diagonals structurally) rather than by the merge heuristic, validated
+sound on startpath3 and ~2000 randomized differential programs. It is
+conservative and not yet the canonical entry point; it is kept as the
+trustworthy alternative and the basis for any future migration.
 
 ## 10. Implementation plan (ordered milestones)
 
