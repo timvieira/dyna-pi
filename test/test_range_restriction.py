@@ -467,6 +467,49 @@ def test_DoD2_equivalence_path():
     qs.assert_equal_query('goal', ps.user_query('goal'))
 
 
+#_______________________________________________________________________________
+# Post-condition checks / warnings
+
+
+def test_postcondition_no_warning_on_clean_examples():
+    # the worked examples all converge cleanly and produce only genuine
+    # residue, so none of them should warn (no false positives)
+    import warnings
+    for make in [E1, E2, E3, E5, E6]:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')   # any warning fails the test
+            q = make().normalize_range_restriction()
+            assert q.converged
+    # adom escape is also clean
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        E3().normalize_range_restriction(adom='adom')
+        E5().normalize_range_restriction(adom='adom')
+
+
+def test_postcondition_warns_on_nonconvergence():
+    # starve the loop: max_passes=0 means it never projects, so an open
+    # program comes back unconverged and the warning fires
+    import pytest
+    with pytest.warns(UserWarning, match='did not converge'):
+        q = E3().normalize_range_restriction(max_passes=0)
+    assert not q.converged
+
+
+def test_postcondition_E5_residue_is_recognized():
+    # the E5 delayed-test rule is *expected* residue, so it must NOT trip the
+    # residue-shape warning even though it is non-range-restricted
+    q = E5().normalize_range_restriction()
+    [r] = q.residual_layer.rules
+    assert RangeRestrictionNormalization._is_delayed_test(q, r)
+
+
+def test_postcondition_E3_residue_is_recovery():
+    q = E3().normalize_range_restriction()
+    [r] = q.residual_layer.rules
+    assert RangeRestrictionNormalization._is_recovery(q, r)
+
+
 if __name__ == '__main__':
     from arsenal import testing_framework
     testing_framework(globals())

@@ -556,7 +556,18 @@ shared `X0` into two independent variables.
   residual layer's output-feeding form (DoD #3).  Step D exposes
   `residual_layer` and `engine_layer` (both `Program`s).  An explicit
   `input_type` (e.g. `h(X) += $free(X).`) seeds the first pass with
-  open-by-declaration inputs (Section 3.1).  Step E (`adom=<functor>`) splices
+  open-by-declaration inputs (Section 3.1).
+- **Post-condition checks** (`_check_postconditions`, `warnings.warn`).  Two
+  silent-failure modes are detectable and warned on (both are confinement
+  conditions; ground-query values are correct regardless): (1)
+  **non-convergence** — the projection loop hit `max_passes` without a clean
+  break, exposed as `self.converged`; (2) **residue shape** — every rule in
+  `residual_layer` must be a recovery rule or a delayed-test rule (Theorem
+  (c)); a rule that is neither signals the loop gave up rather than that the
+  residue is irreducible.  With `adom`, the residue must be empty outright.
+  The original open-input gap (an input that arrives open but is declared
+  ground) is *not* warnable — the transform has no signal for it — so it is
+  handled by Section 3.1 / `input_type`, not a runtime check.  Step E (`adom=<functor>`) splices
   `adom(V)` for every remaining unbindable variable and declares `adom(_)` an
   input; inside `Abbreviate`, the dropped-var correction emits `adom(V)` for
   each lost variable instead of `Semiring.multiple(inf)`, so witness counts
