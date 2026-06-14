@@ -1,35 +1,31 @@
 """
-Range-restriction analysis (docs/range-restriction-normalization.md, Step A).
+Range-restriction analysis and normalization
+(docs/range-restriction-normalization.md).
 
-Two analyses live here:
+This module holds two things, both syntactic and sound — there is no dependence
+on the type analysis's `$free`/`ALLOW_FREE_MERGE` machinery, which is unsound on
+diagonals (it drops `path(I,I)`; see `test_abbreviate.py::todo_startpath3`):
 
-- `bindable_vars(program, rule)`: the per-rule dataflow computing which
-  variables a bottom-up firing can bind — variables of range-generating
-  subgoals, closed under propagation through the binder builtins (`=`, `is`).
-  Tests (the comparison builtins, `$not_matches`) generate nothing, so a
-  test-only variable is *not* bindable even though it occurs in the body.
-  This refines the purely syntactic `Program.is_range_restricted`
-  (`head_vars ⊆ body_vars`), which wrongly accepts `f(X) += g(Y) * (X > Y)`.
+- **The refined range-restriction check** — `bindable_vars(program, rule)`: the
+  per-rule dataflow computing which variables a bottom-up firing can bind
+  (variables of range-generating subgoals, closed under the binder builtins
+  `=`/`is`; tests generate nothing).  It refines the purely syntactic
+  `Program.is_range_restricted` (`head_vars ⊆ body_vars`), which wrongly accepts
+  `f(X) += g(Y) * (X > Y)` — a test-only variable is non-bindable, hence not
+  range-restricted, even though it occurs in the body.
 
-- `open_types(program)`: the openness fixpoint — the `$free`-marked derivable
-  item types of the program, computed by the existing type analysis over the
-  booleanized, `$free`-instrumented program (`to_type_program`).  The carrier
-  is term patterns, so openness is tracked at any depth and intra-term sharing
-  is preserved; there is no (functor, position) carrier anywhere.
-
-Note the deliberate asymmetry between the two notions (this is where the spec's
-E5 is sharpened): a `$free` mark asserts *pass-through* — the item's value is
-independent of the marked variable — which licenses projection.  A test-only
-variable is non-bindable (the rule is not range-restricted) but it is NOT
-pass-through: in `f(X) += g(Y) * (X > Y)` the value of `f(X)` depends on `X`.
-Projecting it would corrupt ground queries (`f(2)` must be 0 when `g(3)=1`),
-so such a rule is irreducibly non-range-restricted without an active domain;
-under Step E, splicing `adom(X)` makes it range-restricted.
+- **The sound normalization** — `phantom_paths`, `PhantomProjection`,
+  `ValueSplit`, and the `RangeRestrictionNormalizer` entry point (reached by
+  `Program.normalize_range_restriction`).  Projection is gated by a *verifiable*
+  condition (a phantom is a variable occurring exactly once in the head,
+  unconstrained, with phantom body occurrences — single occurrence excludes
+  diagonals), so it is sound by construction and invariant under wrapping.
+  Overlapping constant/variable cases (`f(1)`/`f(X)`) are handled by a
+  default+exception decomposition (sound by linearity of `+`).
 """
 
-import warnings
 
-from dyna import Program, TransformedProgram, Rule, Term, term_vars, snap, is_var, fresh
+from dyna import TransformedProgram, Rule, Term, term_vars, snap, is_var, fresh
 from dyna.term import Var
 from dyna.builtin import is_builtin, cmps
 
@@ -99,25 +95,6 @@ def is_rule_range_restricted(program, rule):
 def is_range_restricted(program):
     "Program-level version of the refined check."
     return all(is_rule_range_restricted(program, r) for r in program)
-
-
-def has_free(t):
-    "True iff type `t` carries a `$free` mark (the type is open)."
-    return any(isinstance(c, Term) and c.fn == '$free' for c in t.body)
-
-
-def open_types(program, types=None, **kwargs):
-    """
-    The openness fixpoint (Step A): the `$free`-marked derivable item types of
-    `program`.  `types` may be a precomputed `TypeAnalyzer`; otherwise the
-    standard one is run (booleanization adds the `$free` base case per rule;
-    input declarations participate through the analyzer's input types — a
-    declared input arrives `$bound` unless its input type says `$free`;
-    propagation through consumption is the type solver's job).
-    """
-    if types is None:
-        types = program.type_analysis(**kwargs)
-    return [t for t in types.chart if has_free(t)]
 
 
 #______________________________________________________________________________
@@ -556,137 +533,3 @@ class RangeRestrictionNormalizer(TransformedProgram):
             [r for r in self.rules if not is_rule_range_restricted(self, r)])
         self.engine_layer = self.spawn(
             [r for r in self.rules if is_rule_range_restricted(self, r)])
-
-
-#______________________________________________________________________________
-# The spec transform (docs/range-restriction-normalization.md, Section 11 DoD):
-# range-restriction normalization built on `abbreviate`.  This is the canonical
-# entry point reached by `Program.normalize_range_restriction`.  It is more
-# aggressive than the phantom normalizer above but inherits abbreviate's
-# projection substrate, which is unsound on diagonals (see todo_startpath3 /
-# the phantom normalizer for the sound alternative).
-
-class RangeRestrictionNormalization(TransformedProgram):
-
-    def __init__(self, program, adom=None, input_type=None, prune=True):
-        self.adom = adom
-        # the active domain is a new input relation: the user supplies it
-        adom_input = Program(f'{adom}(_).') if adom is not None else None
-
-        if input_type is not None and input_type.inputs is None:
-            # a user-supplied input type may omit its own type parameters;
-            # Abbreviate requires them to be declared (possibly empty)
-            input_type = input_type.set_input_types(Program([]))
-
-        # Single pass — no outer loop.  `type_analysis` already computes the
-        # *transitive* openness fixpoint (propagation through consumption is
-        # the type solver's job, and its forward chaining closes over
-        # recursion), so one Abbreviate pass, expanding over the complete type
-        # chart, projects every open position at once.  A second pass would
-        # only re-project the recovery rules this pass emitted — their
-        # reintroduced variable is open by construction — i.e. chew on the
-        # residue.  `input_type` (Section 3.1) lets an input declare a position
-        # `$free` (a Step A base case with no deriving rule).  The
-        # post-condition below asserts this one-shot completeness.
-        types = program.type_analysis(input_type=input_type)
-        if open_types(program, types=types):
-            q = program.abbreviate(types=types, adom=adom)
-            if adom is not None:
-                q.set_input_types((q.inputs or Program([])) + adom_input)
-            if prune:
-                q = q.prune_very_fast()
-        else:
-            q = program   # already range-restricted; nothing open to project
-
-        rules = list(q)
-        if adom is not None:
-            # Step E: re-bind every remaining unbindable variable over the
-            # active domain.  This removes the residue entirely (DoD #5).
-            rules = [self._splice_adom(q, r) for r in rules]
-
-        super().__init__('rr-normalize', program, rules)
-        if adom is not None:
-            self.set_input_types((self.inputs or Program([])) + adom_input)
-
-        # Step D: the residual layer is what survives the refined check.
-        self.residual_layer = self.spawn(
-            [r for r in self.rules if not is_rule_range_restricted(self, r)])
-        self.engine_layer = self.spawn(
-            [r for r in self.rules if is_rule_range_restricted(self, r)])
-
-        self._check_postconditions()
-
-    def _check_postconditions(self):
-        """Post-conditions (confinement, not soundness — ground-query values
-        are correct regardless).
-
-        One-shot completeness: because `type_analysis` computes the transitive
-        openness fixpoint, a single Abbreviate pass confines all *projectable*
-        openness — a second pass would only re-project the recovery rules it
-        just emitted.  No program is known that needs more than one pass.
-
-        With `adom`, Step E must have removed the residue entirely — a hard
-        invariant (a non-empty residue means the splice missed a variable), so
-        it is asserted.
-
-        Without `adom`, every residual rule should be a recovery rule
-        (`output(.., V, ..) += q\\j`) or a delayed-test rule (spec E5,
-        Theorem (c)).  A rule that is neither is *warned*, not asserted,
-        because there is a genuine third case: a **builtin-orphaned** rule,
-        where abbreviation projected a pass-through variable out of an open
-        item while it was also feeding a builtin (e.g.
-        `g(Z) += f(X) * (Z is X+1)`).  That only arises when the open item is
-        the builtin variable's sole generator — i.e. on programs whose source
-        is already non-evaluable — so it is a confined-but-degenerate residue,
-        not a transform failure worth crashing on.
-        """
-        if self.adom is not None:
-            assert not self.residual_layer.rules, (
-                f'adom={self.adom!r} given but residue is non-empty — Step E '
-                f'should have removed it: '
-                + '; '.join(map(str, self.residual_layer.rules)))
-            return
-
-        unexpected = [
-            r for r in self.residual_layer.rules
-            if not (self._is_recovery(self, r) or self._is_delayed_test(self, r))
-        ]
-        if unexpected:
-            warnings.warn(
-                'RangeRestrictionNormalization residual layer contains '
-                f'{len(unexpected)} rule(s) that are neither recovery nor '
-                'delayed-test form (a transform gap, or a builtin-orphaned '
-                'variable on an already-non-evaluable program): '
-                + '; '.join(map(str, unexpected)))
-
-    @staticmethod
-    def _is_delayed_test(program, rule):
-        """A delayed-test rule (spec E5, Section 4 case 2): the head variables
-        that make the rule non-range-restricted occur only in tests, so they
-        are not pass-through (the value depends on them) and cannot be
-        projected — irreducible residue without an active domain."""
-        unbound = term_vars(rule.head) - bindable_vars(program, rule)
-        if not unbound: return False
-        test_vars = set()
-        for b in rule.body:
-            b = snap(b)
-            if isinstance(b, Term) and b.fn in TEST_FNS:
-                test_vars |= term_vars(b)
-        return unbound <= test_vars
-
-    @staticmethod
-    def _is_recovery(program, rule):
-        """A recovery rule: a single non-builtin body item whose variables all
-        appear in the head (the reintroduced free position is in the head
-        only).  This is the residue form of spec Step D."""
-        body = [b for b in rule.body if not program.is_const(b)]
-        if len(body) != 1: return False
-        [b] = body
-        if program.is_builtin(b): return False
-        return term_vars(b) <= term_vars(rule.head)
-
-    def _splice_adom(self, program, rule):
-        unbound = (term_vars(rule.head) | term_vars(rule.body)) - bindable_vars(program, rule)
-        if not unbound: return rule
-        return Rule(rule.head, *rule.body,
-                    *[Term(self.adom, v) for v in sorted(unbound, key=str)])

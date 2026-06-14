@@ -8,11 +8,32 @@ The load-bearing regression is `test_startpath3_sound`: abbreviate drops the
 reflexive diagonal `path(I,I)` (all-zero paths); this refuses to project it.
 """
 
-from dyna import Program
-from dyna.analyze.range_restriction import is_range_restricted
+from dyna import Program, term_vars
 from dyna.analyze.range_restriction import (
+    is_range_restricted, is_rule_range_restricted, bindable_vars,
     phantom_paths, PhantomProjection, ValueSplit, RangeRestrictionNormalizer,
 )
+
+
+# --------------------------------------------- the refined range-restriction check
+
+def test_refined_check_rejects_test_only_var():
+    # the E5 trap: syntactic check passes (X in body), refined check rejects it
+    p = Program('f(X) += g(Y) * (X > Y). goal += f(X). inputs: g(Y). outputs: goal.')
+    assert p.is_range_restricted()          # syntactic: wrong
+    assert not is_range_restricted(p)       # refined: right
+    [rf, _] = p.rules
+    assert not is_rule_range_restricted(p, rf)
+
+
+def test_bindable_vars_binder_vs_test():
+    # `is` binds (engine inverts X is Y+1); comparisons are tests that bind nothing
+    p = Program('f(X) += g(Y) * (X is Y + 1). outputs: f(X).')
+    [r] = p.rules
+    assert term_vars(r.head) <= bindable_vars(p, r)
+    q = Program('f(X) += g(Y) * (X > Y). outputs: f(X).')
+    [r] = q.rules
+    assert not (term_vars(r.head) <= bindable_vars(q, r))
 
 
 def diff_ok(p, q, queries, D=''):

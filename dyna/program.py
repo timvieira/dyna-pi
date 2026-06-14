@@ -1792,11 +1792,11 @@ input/output declarations</summary>\
 
     def normalize_range_restriction(self, **kwargs):
         """Rewrite into an equivalent program whose non-range-restriction is
-        confined to an explicit residual output layer (see
-        docs/range-restriction-normalization.md); pass `adom=<functor>` to
-        remove the residue over an active domain."""
-        from dyna.analyze.range_restriction import RangeRestrictionNormalization
-        return RangeRestrictionNormalization(self, **kwargs)
+        confined to an explicit residual output layer, using the sound,
+        phantom-based projection (see docs/range-restriction-normalization.md);
+        pass `adom=<functor>` to remove the residue over an active domain."""
+        from dyna.analyze.range_restriction import RangeRestrictionNormalizer
+        return RangeRestrictionNormalizer(self, **kwargs)
 
     #___________________________________________________________________________
     # Program normalization
