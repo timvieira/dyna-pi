@@ -51,6 +51,16 @@ def test_phantom_paths_invariant_under_wrapping():
         'item(d,f(X)) += 3. goal += item(d,f(X)). outputs: goal.')) == {('item', 2, (1, 0))}
 
 
+def test_self_recursive_phantom_lifts():
+    # greatest-fixpoint: a self-recursive open position (the lifted geometric
+    # series) is phantom — x(I)'s value is independent of I, so it lifts to a
+    # scalar. A least fixpoint would miss this (the recursion is self-justifying).
+    p = Program('x(I) += 1. x(I) += 0.5 * x(I). outputs: x(_).')
+    assert phantom_paths(p) == {('x', 1, (0,))}
+    q = p.normalize_range_restriction()
+    assert diff_ok(p, q, ['x(j)', 'x(k)'])
+
+
 def test_phantom_paths_excludes_diagonals():
     for src in ['temp(X0,X0) += 1. outputs: temp(A,B).',
                 'path(I,I). path(I,K) += path(I,J)*edge(J,K). inputs: edge(I,J). outputs: path(I,K).',

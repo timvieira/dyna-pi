@@ -249,7 +249,14 @@ def _phantom_path_in_rule(program, r, path, P, gskel):
 
 
 def phantom_paths(program):
-    """Least-fixpoint set of provably-phantom `(fn, arity, path)` triples."""
+    """The **greatest**-fixpoint set of phantom `(fn, arity, path)` triples:
+    assume every head variable position is phantom, then remove any that
+    violates the condition given the current set.  The greatest fixpoint (vs a
+    least one) is what captures *self-recursive* phantoms — e.g. the lifted
+    geometric series `x(I) += 1. x(I) += 0.5*x(I)`, where `I` is phantom only
+    because `x`'s position is phantom.  Soundness is unchanged on diagonals:
+    single-occurrence (condition (1)) excludes them regardless of fixpoint
+    direction."""
     groups = _rule_groups(program)
     candidates, gskel = {}, {}
     for key, rules in groups.items():
@@ -262,24 +269,30 @@ def phantom_paths(program):
         gs = {ground_skeleton(snap(r.head)) for r in rules}
         gskel[key] = next(iter(gs)) if len(gs) == 1 else None
 
-    P = set()
+    # start optimistic: every candidate position of a projectable predicate
+    P = {(fn, arity, path)
+         for (fn, arity), rules in groups.items()
+         if not _is_input_pred(program, fn, arity) and gskel[(fn, arity)] is not None
+         for path in candidates[(fn, arity)]}
+
     changed = True
     while changed:
         changed = False
         for (fn, arity), rules in groups.items():
-            if _is_input_pred(program, fn, arity) or gskel[(fn, arity)] is None:
-                continue
-            for path in candidates[(fn, arity)]:
-                if (fn, arity, path) in P:
-                    continue
-                if all(_phantom_path_in_rule(program, r, path, P, gskel) for r in rules):
-                    # require a uniform skeleton across rules (sound, conservative)
-                    keys = {skeleton_key(snap(r.head),
-                                         {p for (f, a, p) in P | {(fn, arity, path)}
-                                          if (f, a) == (fn, arity)})
-                            for r in rules}
-                    if len(keys) == 1:
-                        P.add((fn, arity, path))
+            for path in list(candidates[(fn, arity)]):
+                if (fn, arity, path) in P and not all(
+                        _phantom_path_in_rule(program, r, path, P, gskel) for r in rules):
+                    P.discard((fn, arity, path))
+                    changed = True
+            # a predicate must keep a uniform skeleton across rules given P;
+            # if not, none of its positions is projectable
+            keys = {skeleton_key(snap(r.head),
+                                 {p for (f, a, p) in P if (f, a) == (fn, arity)})
+                    for r in rules}
+            if len(keys) > 1:
+                for path in list(candidates[(fn, arity)]):
+                    if (fn, arity, path) in P:
+                        P.discard((fn, arity, path))
                         changed = True
     return P
 
