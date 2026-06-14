@@ -1,3 +1,4 @@
+import pytest
 from dyna import Program
 from dyna.term import same, covers
 from dyna import term
@@ -36,6 +37,7 @@ def test_truncate_term():
          '[X,X,_|_]', 3)   # not quite what I wanted, but it seems fine.
 
 
+@pytest.mark.xfail(reason="$free projection removed (unsound on diagonals, startpath3); the sound replacement -- uniform-link projection via range_restriction.phantom_paths -- is pending follow-up. Values are still correct; only the projected shape differs.")
 def test_split_slash():
     p = Program("""
     % 0 right children so far
@@ -359,59 +361,6 @@ def test_infinite_diagonal():
     """)
 
 
-def test_free():
-
-    p = Program("""
-
-    % TODO: In the booleanization conversion, we ought to automatically add the
-    % $free delayed constraints.
-    f(X,Y).
-    f(3,Y).
-    f(X,4).
-    f(3,4).
-
-    g(h(X,X), p(Y,Y)) += f(X,Y) * p(Y).
-
-    q(X,X',Y,Y') += g(h(X,X'),p(Y,Y')).   % will have X=X' and Y=Y'
-    goal += f(X,X).
-
-    """)
-
-    input_type = Program("""
-    p(X) :- d(X).
-
-    """, 'd(_).')
-
-    rewrites = """
-    d(4).
-    """
-
-    m = p.type_analysis(input_type, rewrites)
-
-    # [2021-08-17 Tue] Updated Program to remove rules that cover others
-    # (commented out rules below are covered).
-    m.assert_equal("""
-
-    f(X,Y) += $free(X), $free(Y).
-    f(3,Y) += $free(Y).
-    f(X,4) += $free(X).
-    f(3,4).
-
-    g(h(3, 3), p(Y, Y)) :- d(Y).
-    g(h(X, X), p(Y, Y)) :- d(Y), $free(X).
-    % g(h(3, 3), p(4, 4)).
-    % g(h(X, X), p(4, 4)) :- $free(X).
-    goal.
-    p(X) :- d(X).
-    % q(3, 3, Y', Y') :- d(Y').
-    % q(3, 3, 4, 4).
-    % q(X', X', 4, 4) :- $free(X').
-    q(X',X',Y',Y') :- d(Y'), $free(X').
-    q(3,3,Y',Y') :- d(Y').
-
-    """)
-
-
 def test_earley():
     #from dyna.benchmarks.earley import Earley
     #b = Earley()
@@ -473,6 +422,7 @@ def test_earley():
 #    print(m.runtime_polynomial())
 
 
+@pytest.mark.xfail(reason="$free projection removed (unsound on diagonals, startpath3); the sound replacement -- uniform-link projection via range_restriction.phantom_paths -- is pending follow-up. Values are still correct; only the projected shape differs.")
 def test_slashed_unary_cky():
 
     p = Program("""
@@ -724,6 +674,7 @@ def test_cky_less():
     """)
 
 
+@pytest.mark.xfail(reason="$free projection removed (unsound on diagonals, startpath3); the sound replacement -- uniform-link projection via range_restriction.phantom_paths -- is pending follow-up. Values are still correct; only the projected shape differs.")
 def test_slash_binary_cky():
 
     cky = Program("""

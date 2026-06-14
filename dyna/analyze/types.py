@@ -31,21 +31,16 @@ _debug = debug
 #_______________________________________________________________________________
 # Booleanization / type program preprocessing
 
-def add_free_constraints(r):
-    assert isinstance(r, Rule), r
-    #r = deref(r)
-    return Rule(r.head, *r.body, *[Term('$free', v) for v in term_vars(r.head) - term_vars(r.body)])
-
 def remove_constants(p, r):
     assert isinstance(r, Rule), r
     return Rule(r.head, *[b for b in r.body if not p.is_const(b)])
 
 def to_type_program(p):
-    q = TransformedProgram('booleanize', p, [
-        # create $free(X) constraints for each non-range-restricted variable X in the rule.
-        remove_constants(p, add_free_constraints(r))
-        for r in p
-    ])
+    # The type analysis assumes range-restricted input (run range-restriction
+    # normalization first), so there is no openness to mark: `head - body` is
+    # empty for every rule.  The old `$free`/`ALLOW_FREE_MERGE` apparatus that
+    # represented openness here was unsound on diagonals and has been removed.
+    q = TransformedProgram('booleanize', p, [remove_constants(p, r) for r in p])
     q.semiring = Boolean
     return q
 

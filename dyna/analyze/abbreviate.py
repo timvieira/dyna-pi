@@ -17,15 +17,6 @@ def snap_vars(x):
     return {snap(v) for v in term_vars(x)}
 
 
-def freebies(r):
-    "Returns the set of $free-typed variables in `r`."
-    return {
-        snap(x.args[0])
-        for x in r.body
-        if isinstance(x, Term) and x.fn == '$free'
-    }
-
-
 class Abbreviate(TransformedProgram):
 
     def __init__(self, program, types, debug=False, adom=None):
@@ -102,28 +93,11 @@ class Abbreviate(TransformedProgram):
                         *head_constraints,
                     )
 
-                    new_rule = self.__dropped_var_correction(body_closure, new_rule, debug)
-
                     add_rule(r_id, new_rule)
 
         super().__init__('specialize', program, new_rules)
         # the user's type parameter are now required as input
         self.set_input_types(self.inputs + self.types._input_type.inputs)
-
-    def __dropped_var_correction(self, body_closure, new_rule, debug):
-        # apply the multiplicity correction if a free local variable is lost
-        before = freebies(body_closure) - snap_vars(body_closure.head)
-        after = freebies(new_rule) - snap_vars(new_rule.head)
-        if before != after:
-            if debug: print(colors.light.red % 'VARS CHANGED!')
-            if self.adom is not None:
-                # re-bind each lost variable over the active domain; the
-                # witness count becomes |adom| instead of inf
-                lost = sorted(before - after, key=str)
-                new_rule = Rule(new_rule.head, *new_rule.body, *[Term(self.adom, v) for v in lost])
-            else:
-                new_rule = Rule(new_rule.head, *new_rule.body, self.parent.Semiring.multiple(float('inf')))
-        return new_rule
 
     def __abbrev(self, t):
         if self.is_const(t): return t
@@ -139,5 +113,5 @@ class Abbreviate(TransformedProgram):
         #    colors.orange % 't_type:', t_type,
         #)
         return Subst().mgu(t_type.head, t.head)(
-            Term(self._new_names[t.i], *(term_vars(t_type) - freebies(t_type)))
+            Term(self._new_names[t.i], *term_vars(t_type))
         )
