@@ -13,22 +13,16 @@ from dyna import (
 def body(x): return x.body if isinstance(x, Rule) else [x]
 
 
-def snap_vars(x):
-    return {snap(v) for v in term_vars(x)}
-
-
 class Abbreviate(TransformedProgram):
+    """Type-specialization: split items into their disjoint simple types and
+    rename each branch.  Assumes range-restricted input (run range-restriction
+    normalization first); it does not project open positions -- that was the
+    `$free` machinery, which was unsound on diagonals and has been removed."""
 
-    def __init__(self, program, types, debug=False, adom=None):
+    def __init__(self, program, types, debug=False):
 
         self.parent = program
         self.types = types
-        # Active-domain mode (range-restriction-normalization.md, Step E):
-        # when `adom` names a domain predicate, a lost free variable V is
-        # re-bound by splicing `adom(V)` instead of attaching the
-        # Semiring.multiple(inf) witness factor, so the witness count is
-        # |adom| rather than inf.
-        self.adom = adom
 
         self.types.chart = self.types.chart.sort()   # for stability in test cases
         del types
@@ -67,19 +61,15 @@ class Abbreviate(TransformedProgram):
 
             for t_body in join_f(self.types.chart.lookup, *r.body):
 
-                # constraint closure for the body's type
-                frees = [Term('$free', v) for v in term_vars(r.head) - term_vars(r.body)]
-                # body constraints before closure
+                # body constraints, then closure (input is range-restricted)
                 body_constraints = [b for t_b in t_body for b in body(t_b)]
-                # body constraints after closure
-                body_closure = self.types.rewrites(Rule(r.head, *body_constraints, *frees), ALLOW_FREE_MERGE=True)
+                body_closure = self.types.rewrites(Rule(r.head, *body_constraints))
 
                 if body_closure is None: continue
 
                 for tt in self.types.chart.lookup(r.head):
 
-                    t_head = self.types.rewrites(Rule(r.head, *tt.body, *body_closure.body), ALLOW_FREE_MERGE=False)
-                    #t_head = self.types.rewrites(Rule(r.head, *tt.body, *body_closure.body), ALLOW_FREE_MERGE=True)
+                    t_head = self.types.rewrites(Rule(r.head, *tt.body, *body_closure.body))
 
                     if t_head is None: continue
                     t_head.i = tt.i

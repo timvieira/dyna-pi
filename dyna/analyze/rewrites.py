@@ -30,16 +30,6 @@ class Rewrites:
     def __init__(self, rules):
         self.cp = ConstraintPropagation(
             rules,
-            # the rule below is redundant, but it is in contrast to the "no free merge" case
-            # $bound(X) :- $free(X), $bound(X).
-            propagation_hooks = [self._propagation_hook_bound]
-        )
-
-        # Sometimes free and bound don
-        self.cp_no_free_merge = ConstraintPropagation(
-            rules + """
-            $fail :- $free(X), $bound(X).
-            """,
             propagation_hooks = [self._propagation_hook_bound]
         )
 
@@ -62,74 +52,36 @@ class Rewrites:
     def __repr__(self):
         return f'{self.__class__.__name__} {Program(self.cp.rules)}'
 
-    def __call__(self, R, drop_checked=False, USE_INSTS=True, ALLOW_FREE_MERGE=True):
+    def __call__(self, R, drop_checked=False, USE_INSTS=True):
         assert isinstance(R, Rule), R
         R = deref(R)
-        cp = self.cp_no_free_merge if not ALLOW_FREE_MERGE else self.cp
 
-        chart = cp(R.body)
+        chart = self.cp(R.body)
         if chart is None: return
 
-        subst = Subst({x: y for _,x,y in cp.bindings})
+        subst = Subst({x: y for _,x,y in self.cp.bindings})
         chart = {subst(x) for x in chart if isinstance(x, Term) and x.fn != '='}
 
         assert all(isinstance(x, Term) for x in chart)
 
-        drop = set(cp.checked) if drop_checked else set()
+        drop = set(self.cp.checked) if drop_checked else set()
 
-        # The issue we have with intersection (i.e., the reason why we have
-        # ALLOW_FREE_MERGE=False) is that we actually do truly have intersection (subsumption
-        # actually) when we have a free variable.  It really is the case that f(X:free) is a
-        # superset of f(X:int) and everything else!  So the behavior is correct.  The problem
-        # is that we are being sneaky with the not merging these free things.
         if USE_INSTS:
-
             bound_vars = {x.args[0] for x in chart if x.fn == '$bound'}
-            free_vars = {x.args[0] for x in chart if x.fn == '$free'}
-            got_bound = {X for X in bound_vars | free_vars if not is_var(X)}
-
-            # drop $bound if its argument is already bound (equiv to dropping a checked constraint)
+            got_bound = {X for X in bound_vars if not is_var(X)}
+            # drop $bound if its argument is already bound (a checked constraint)
             for X in bound_vars & got_bound:
                 drop.add(Term('$bound', X))
 
-            if ALLOW_FREE_MERGE:
-                # drop $free(X) if X is bound directly by unification or by any
-                # non-$free constraint (equiv to dropping a checked constraint)
-                for X in free_vars & got_bound:
-                    drop.add(Term('$free', X))
-
-                # (equiv to dropping a checked constraint)
-                for X in free_vars:
-                    #if not all((y.fn == '$free' or X not in term_vars(y)) for y in chart):   # <=== equivalent condition
-                    if any((y.fn != '$free' and X in term_vars(y)) for y in chart):
-                        drop.add(Term('$free', X))
-
-            if not ALLOW_FREE_MERGE:
-
-                # Fail when $free(X) has X is bound directly by unification or
-                # by any non-$free constraint. Each free variables must be
-                # distinct, otherwise they are not *free* they are *equality
-                # constrained*.
-
-                if free_vars & got_bound: return
-
-                # We have a problem if there is more than 1 variable equal to `X`.
-                if any(sum((X == A or X == B) for [_,A,B] in cp.bindings) > 1 for X in free_vars):
-                    return
-
-                if not all((y.fn == '$free' or X not in term_vars(y)) for y in chart for X in free_vars):
-                    return
-
         return Rule(subst(R.head), *(chart - drop))
 
-    def intersect(self, r, s, ALLOW_FREE_MERGE=False):
+    def intersect(self, r, s):
         "Compute the intersection of simple types `r` and `s`."
         s = fresh(s)
         assert isinstance(r, Rule) and isinstance(s, Rule), [r, s]
         subst = Subst().mgu(r.head, s.head)
         if subst is Subst.FAIL: return None
-        return self(Rule(r.head, *r.body, *s.body, *scons(subst)),
-                    ALLOW_FREE_MERGE=ALLOW_FREE_MERGE)
+        return self(Rule(r.head, *r.body, *s.body, *scons(subst)))
 
     def covers(self, r, s):
         "Return true if `r ⊇ s`"
@@ -145,7 +97,7 @@ class Rewrites:
         S = self(s, drop_checked=True)
 
         t = Rule(r.head, *s.body, *r.body, *sc)
-        T = self(t, ALLOW_FREE_MERGE=False, drop_checked=True)
+        T = self(t, drop_checked=True)
 
         if DEBUG > 2:
             head_cond = S is not None and T is not None and s.head == T.head
