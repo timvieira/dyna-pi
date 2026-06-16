@@ -11,8 +11,8 @@ from arsenal.datastructures.heap import LocatorMaxHeap  # Warning: BucketQueue t
 from collections import defaultdict
 
 from dyna import (
-    NotMatchesConstraint, SolverLimitation, InstFault, unify, fresh,
-    is_ground, Term, snap
+    BuiltinConstraint, NotMatchesConstraint, SolverLimitation, InstFault,
+    unify, fresh, is_ground, Term, snap
 )
 from dyna.execute.base import BaseSolver, tupleone
 from dyna.builtin import cmps
@@ -130,6 +130,13 @@ class Solver(BaseSolver):
 
         elif not isinstance(q, Term):
             raise InstFault(f'query mode not supported: {q}')
+
+        elif isinstance(q, BuiltinConstraint):
+            for r in q.run(self.program):
+                if r.is_const():
+                    yield self.one
+                else:
+                    raise InstFault()
 
         elif q.fn == '$not_matches':
             for r in NotMatchesConstraint(*q.fargs).run(self.program):

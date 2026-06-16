@@ -5,7 +5,7 @@ from arsenal import colors
 from itertools import combinations
 
 from dyna.pretty import PrettyPrinter
-from dyna.term import Term, fresh, term_vars, Subst, is_var, generalizer, deref, MostGeneralSet
+from dyna.term import Term, fresh, term_vars, Subst, generalizer, deref, MostGeneralSet
 from dyna.program import Program, Rule
 from dyna.propagate import ConstraintPropagation, scons
 
@@ -52,7 +52,7 @@ class Rewrites:
     def __repr__(self):
         return f'{self.__class__.__name__} {Program(self.cp.rules)}'
 
-    def __call__(self, R, drop_checked=False, USE_INSTS=True):
+    def __call__(self, R, drop_checked=False):
         assert isinstance(R, Rule), R
         R = deref(R)
 
@@ -65,13 +65,6 @@ class Rewrites:
         assert all(isinstance(x, Term) for x in chart)
 
         drop = set(self.cp.checked) if drop_checked else set()
-
-        if USE_INSTS:
-            bound_vars = {x.args[0] for x in chart if x.fn == '$bound'}
-            got_bound = {X for X in bound_vars if not is_var(X)}
-            # drop $bound if its argument is already bound (a checked constraint)
-            for X in bound_vars & got_bound:
-                drop.add(Term('$bound', X))
 
         return Rule(subst(R.head), *(chart - drop))
 

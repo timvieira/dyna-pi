@@ -1773,7 +1773,7 @@ input/output declarations</summary>\
         """
         from dyna.analyze.dead import _prune_specialize, _prune_dead
         if bottom_up_only:
-            s = self.type_analysis(input_type=self.inputs, rewrites='', use_insts=False, **kwargs)
+            s = self.type_analysis(input_type=self.inputs, rewrites='', **kwargs)
         else:
             s = self.usefulness_analysis(**kwargs)
         if specialize:
@@ -1790,13 +1790,15 @@ input/output declarations</summary>\
         #if types is None: types = self.usefulness_analysis()
         return Abbreviate(self, types, **kwargs)
 
-    def normalize_range_restriction(self, **kwargs):
-        """Rewrite into an equivalent program whose non-range-restriction is
-        confined to an explicit residual output layer, using the sound,
-        phantom-based projection (see docs/range-restriction-normalization.md);
-        pass `adom=<functor>` to remove the residue over an active domain."""
+    def normalize_range_restriction(self):
+        """Rewrite into a strictly equivalent program whose non-range-restriction
+        is confined to an explicit residual layer, using the sound, phantom-based
+        projection (see docs/range-restriction-normalization.md).  Strictly
+        semantics-preserving: irreducibly open rules remain in the residual layer
+        and summed-away open variables keep their `inf` witness count (no
+        active-domain restriction, which would change answers)."""
         from dyna.analyze.range_restriction import RangeRestrictionNormalizer
-        return RangeRestrictionNormalizer(self, **kwargs)
+        return RangeRestrictionNormalizer(self)
 
     #___________________________________________________________________________
     # Program normalization
@@ -1932,9 +1934,8 @@ input/output declarations</summary>\
         if input_type is None: input_type = self.generic_input_type_bindings()
         return TypeAnalyzer(self, input_type, rewrites, **kwargs)
 
-    def usefulness_analysis(self, *, input_type=None, output_type=None, use_insts=True, **kwargs):
-        # we don't need to infer binding states in this analysis
-        s = self._useful(output_type=output_type).type_analysis(input_type=input_type, use_insts=use_insts, **kwargs)
+    def usefulness_analysis(self, *, input_type=None, output_type=None, **kwargs):
+        s = self._useful(output_type=output_type).type_analysis(input_type=input_type, **kwargs)
         # hack the chart to include items that are possible and useful -- i.e.,
         # derived items tagged as $both.
         s.chart = (Program('X += $useful(X).') + s.chart.spawn()).unfold(0,0,defs=s.chart)

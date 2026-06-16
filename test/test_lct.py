@@ -369,7 +369,6 @@ def test_growth():
     check(q)
 
 
-@pytest.mark.xfail(reason="$free projection removed (unsound on diagonals, startpath3); the sound replacement -- uniform-link projection via range_restriction.phantom_paths -- is pending follow-up. Values are still correct; only the projected shape differs.")
 def test_power_iteration():
 
     p = Program("""
@@ -407,8 +406,9 @@ def test_power_iteration():
     print(q.prune())
     check(q.prune())
 
-    print(q.prune().abbreviate().prune())
-    check(q.prune().abbreviate().prune())
+    # Sound range-restriction normalization replaces abbreviate's `$free` drop.
+    print(q.prune().normalize_range_restriction().prune())
+    check(q.prune().normalize_range_restriction().prune())
 
 
 def test_diamond():

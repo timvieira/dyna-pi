@@ -67,8 +67,7 @@ class TypeAnalyzer:
     propagation system and relaxation steps.
     """
 
-    # XXX: insts are an experimental feature
-    def __init__(self, program, input_type, rewrites, max_depth=5, use_insts=True, verbosity=0, basic=True):
+    def __init__(self, program, input_type, rewrites, max_depth=5, verbosity=0, basic=True):
         if isinstance(input_type, str): input_type = Program(input_type)
         if isinstance(rewrites, str): rewrites = Rewrites(rewrites)
 
@@ -87,7 +86,6 @@ class TypeAnalyzer:
         self.program.set_output_types(self.outputs)
 
         # configuration options
-        self.use_insts = use_insts
         self.max_depth = max_depth
         self.rewrites = rewrites
 
@@ -197,7 +195,7 @@ class TypeAnalyzer:
 
     def _relax(self, r):
         _r = r
-        r = self.rewrites(r, USE_INSTS=self.use_insts)
+        r = self.rewrites(r)
         if r is None: return
         # Relax tall terms
         h = truncate_term(r.head, self.max_depth)
