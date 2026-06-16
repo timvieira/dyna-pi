@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 from arsenal import colors
 from dyna import Program, unifies, Symbol
@@ -405,8 +406,9 @@ def test_power_iteration():
     print(q.prune())
     check(q.prune())
 
-    print(q.prune().abbreviate().prune())
-    check(q.prune().abbreviate().prune())
+    # Sound range-restriction normalization replaces abbreviate's `$free` drop.
+    print(q.prune().normalize_range_restriction().prune())
+    check(q.prune().normalize_range_restriction().prune())
 
 
 def test_diamond():

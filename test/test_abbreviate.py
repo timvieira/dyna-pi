@@ -1,9 +1,13 @@
+import pytest
 from arsenal import colors
 
 from dyna import Program
 
 
 def test_simple_geom1():
+    # The self-recursive phantom x(I) lifts to a scalar; the sound normalizer
+    # produces `x_p += 1. x_p += 0.5*x_p. x(_) += x_p.` -- the same reduction
+    # abbreviate's `$free` did, now sound (PhantomProjection, greatest fixpoint).
     p = Program("""
     % lifted geometric series
     x(I) += 1.
@@ -17,23 +21,25 @@ def test_simple_geom1():
     x(I) += 2.
     """)
 
-    q = p.abbreviate()
+    q = p.normalize_range_restriction()
 
-    print(colors.orange % 'abbreviated program:', q)
+    print(colors.orange % 'normalized program:', q)
+
+    q.assert_equal("""
+    x(I) += x_1_p.
+    x_1_p += 1.
+    x_1_p += 0.5 * x_1_p.
+    """)
 
     qs = q.sol()
 
     check(qs, ps)
 
-    q.assert_equal("""
-    x(I) += x_0.
-    x_0 += 1.
-    x_0 += 0.5 * x_0.
-    """)
-
 
 def test_infinite_multiplicity():
-
+    # The f(1)/f(X) constant overlap value-splits (f = f_dft + f_spc, sound by
+    # linearity of +); summing the open f_dft over the universe gives goal = inf.
+    # The sound normalizer reproduces abbreviate's old `$free` values.
     p = Program("""
 
     goal += f(X).
@@ -59,21 +65,17 @@ def test_infinite_multiplicity():
 
     """)
 
-    q = p.abbreviate()
+    q = p.normalize_range_restriction()
+
     q.assert_equal("""
-    f(1) += f_0.
-    f(X) += f_1.
-    g(1) += g_2.
-    g(X) += g_3.
-    goal += goal_4.
-
-    goal_4 += f_0.
-    goal_4 += ∞ * f_1.
-
-    f_0 += 2.
-    f_1 += 3.
-    g_2 += 4 * f_0.
-    g_3 += 4 * f_1.
+    f(X) += f_1_dft.
+    f(X) += f_1_spc(X).
+    f_1_dft += 3.
+    f_1_spc(1) += 2.
+    g(X) += 4 * f_1_dft.
+    g(X) += 4 * f_1_spc(X).
+    goal += f_1_dft * ∞.
+    goal += f_1_spc(X).
     """)
 
     qs = q.sol()
@@ -166,6 +168,9 @@ def check(have, want):
 
 
 def test_abbreviate_geom2():
+    # The sound normalizer value-splits the a(1,Y)/a(X,Y) constant overlap but
+    # (correctly) refuses to project the diagonal a(X,X) -- that drop is the
+    # unsound $free/startpath3 move.  Values are preserved either way.
     p = Program("""
     % lifted geometric series
     a(X,X) += 1.
@@ -192,8 +197,20 @@ def test_abbreviate_geom2():
     special(2) += 3.
     """)
 
-    q = p.abbreviate()
+    q = p.normalize_range_restriction()
     print(q)
+
+    # no-op: the diagonal a(X,X) blocks the value-split (it is not a single
+    # position), so the program is left untouched -- and crucially the diagonal
+    # is NOT projected (that would be the unsound startpath3 move).
+    q.assert_equal("""
+    a(X,X) += 1.
+    a(1,Y) += 1.
+    a(X,Y) += special(Y).
+    a(X,Y) += 0.5 * a(X,Y).
+    goal(X,Y) += a(X,Y).
+    """)
+
     qs = (q + D).sol()
 
     #ps.compare(qs)
@@ -273,7 +290,9 @@ def test_cky_unary_cycle_factoring():
 
     q = p.slash("p(X',I',K')", {1: 1}).prune()
 
-    new_program = q.abbreviate().prune()
+    # Sound degree reduction: the slash span cancels under the `/` quotient
+    # (range_restriction.QuotientProjection), replacing the unsound `$free` drop.
+    new_program = q.normalize_range_restriction().prune()
     s = (new_program + D).sol()
     s.assert_equal_query('goal', value)
     print(colors.ok)
@@ -312,7 +331,9 @@ def test_cky_left_child_slash():
     #qs = q.solver2()(D)
     #qs.assert_equal_query('goal', value)
 
-    new_program = q.abbreviate().prune()
+    # Sound degree reduction: the slash span cancels under the `/` quotient
+    # (range_restriction.QuotientProjection), replacing the unsound `$free` drop.
+    new_program = q.normalize_range_restriction().prune()
     print(q)
     print(new_program)
 
@@ -379,7 +400,9 @@ def test_path_list():
 
 
 def test_startpath1():
-
+    # The diagonal path(I,I) is not a `/` quotient, so the sound normalizer
+    # leaves it alone (projecting it is the unsound startpath3 move).  Values are
+    # preserved; abbreviate's old diagonal-projected shape is deliberately gone.
     p = Program("""
 
     path(I,I).
@@ -400,9 +423,17 @@ def test_startpath1():
     stop(a) += 1.
     """
 
-    q = p.abbreviate().prune()
+    q = p.normalize_range_restriction()
 
-    print(colors.orange % 'abbreviated program:', q.sort())
+    print(colors.orange % 'normalized program:', q.sort())
+
+    # no-op: path(I,I) is a diagonal, not a `/` quotient -- nothing cancels, so
+    # it is left exactly as-is (projecting it is the unsound startpath3 move).
+    q.assert_equal("""
+    path(I,I).
+    path(I,K) += path(I,J) * edge(J,K).
+    goal += start(I) * path(I,K) * stop(K).
+    """)
 
     p_sol = (p + D).sol()
     q_sol = (q + D).sol()
@@ -412,23 +443,10 @@ def test_startpath1():
         q_sol.user_query(output).assert_equal(p_sol.user_query(output))
         print(colors.ok)
 
-    q.assert_equal("""
-
-    edge_0(I,J) += edge(I,J).
-    goal += goal_1.
-    start_4(I) += start(I).
-    stop_5(K) += stop(K).
-    path_3(I,K) += path_3(I,J) * edge_0(J,K).
-    path_3(J,K) += path_2 * edge_0(J,K).
-    goal_1 += start_4(I) * path_3(I,K) * stop_5(K).
-    goal_1 += start_4(K) * path_2 * stop_5(K).
-    path_2 += 1.
-
-    """)
-
 
 def test_startpath2():
-
+    # Same diagonal (path(I,I)); check the sound normalizer preserves path values
+    # on data rather than asserting abbreviate's old diagonal-projected shape.
     path = Program("""
 
     path(I,I).
@@ -438,27 +456,19 @@ def test_startpath2():
     outputs: path(I,K).
     """)
 
-    t = path.type_analysis(input_type="""
-    edge(I,J) :- n(I), n(J).
+    q = path.normalize_range_restriction()
 
-    inputs: start(I); n(I).
+    # no-op: the diagonal path(I,I) is not a quotient, so it is left as-is.
+    q.assert_equal("""
+    path(I,I).
+    path(I,K) += path(I,J) * edge(J,K).
     """)
 
-    s = path.abbreviate(types=t)
-
-    s.assert_equal("""
-
-    edge_0(J,K) += edge(J,K) * n(J) * n(K).
-
-    path(I,J) += path_2(I,J).
-    path(I,I) += path_1.
-
-    path_1 += 1.
-
-    path_2(I,K) += path_2(I,J) * edge_0(J,K).
-    path_2(I,J) += path_1 * edge_0(I,J).
-
-    """)
+    D = "edge(a,b) += 0.5. edge(b,c) += 0.5."
+    p_sol = (path + D).sol()
+    q_sol = (q + D).sol()
+    for query in ['path(a,a)', 'path(a,b)', 'path(a,c)', 'path(b,c)', 'path(c,c)']:
+        q_sol.user_query(query).assert_equal(p_sol.user_query(query))
 
 
 def test_input_dispatch_keeps_user_type_constraints_not_free_bound_markers():
@@ -518,7 +528,7 @@ def test_default_abbreviation_uses_possible_types_not_useful_types():
     """)
 
 
-def todo_startpath3():
+def test_startpath3():
 
     path = Program("""
 
@@ -545,7 +555,7 @@ def todo_startpath3():
     """)
     print('useful types', colors.mark(True))
 
-    s = path.abbreviate(types=t, debug=3)
+    s = path.abbreviate(types=t)
     print(s)
 
     s.assert_equal("""

@@ -1,7 +1,10 @@
+import pytest
 from dyna import Program
 from dyna.term import same, covers
 from dyna import term
 from dyna.analyze.types import truncate_term
+from dyna.term import gen_functor
+from dyna.analyze.range_restriction import QuotientProjection
 
 
 def test_truncate_term():
@@ -37,6 +40,10 @@ def test_truncate_term():
 
 
 def test_split_slash():
+    # Formerly asserted `$free` in the type chart; `$free` is removed.  The sound
+    # replacement is quotient cancellation: the head-lexicalized slash item
+    # `constit(X:H)/rconstit(X0:H)` shares the head word H and the right span K0
+    # between numerator and denominator; only K0 cancels because H drives rewrites.
     p = Program("""
     % 0 right children so far
     rconstit(X:H,I,K) += rewrite(X,H) * word(H,I,K).
@@ -60,21 +67,16 @@ def test_split_slash():
     G = Program('rconstit(X0:H0,J0,K0).').rules[0].head
     q = p.slash(G, {2: 0, 3: 2})
 
-    S = q.type_analysis()
-
-    S.assert_equal("""
-    $other(rconstit(X: H,I,K)) += $bound(H) * $bound(I) * $bound(K) * $bound(X).
-    (constit(X: H0,I,K0) / rconstit(X0: H0,J0,K0)) += $bound(X0) * $free(K0) * $bound(I) * $bound(J0) * $bound(H0) * $bound(X).
-    (constit(X0: H0,J0,K0) / rconstit(X0: H0,J0,K0)) += $free(K0) * $free(H0) * $free(J0) * $free(X0).
-    (rconstit(X0: H0,J0,K0) / rconstit(X0: H0,J0,K0)) += $free(H0) * $free(X0) * $free(K0) * $free(J0).
-    constit(X0: H0,J0,K0) += $bound(J0) * $bound(K0) * $bound(X0) * $bound(H0).
-    goal.
-    length($Gen6) += $bound($Gen6).
-    rconstit(X0: H0,J0,K0) += $bound(K0) * $bound(J0) * $bound(X0) * $bound(H0).
-    rewrite(X: H,Y: H2,Z: H3) += $bound(H2) * $bound(H3) * $bound(X) * $bound(Y) * $bound(Z) * $bound(H).
-    rewrite($Gen1,$Gen2) += $bound($Gen1) * $bound($Gen2).
-    word($Gen3,$Gen4,$Gen5) += $bound($Gen4) * $bound($Gen3) * $bound($Gen5).
+    # `constit/rconstit` shares both the head word H (at depth-2 path (_,0,1),
+    # since X:H is a `:` term) and the right span K (at (_,2)).  Only K cancels:
+    # the head word drives `rewrite(X:H,...)` so the value depends on it -- exactly
+    # what the old type analysis marked `$bound(H0)` while `$free(K0)`.  The
+    # reduction preserves values on a head-lexicalized parse.
+    D = Program("""
+    word("a",0,1)+=1. word("b",1,2)+=1. length(2)+=1.
+    rewrite(s,"a")+=1.  rewrite(np,"b")+=1.  rewrite(s:"a", s:"a", np:"b")+=1.
     """)
+    (QuotientProjection(q) + D).sol().user_query('goal').assert_equal((p + D).sol().user_query('goal'))
 
 
 def test_oddeven():
@@ -359,59 +361,6 @@ def test_infinite_diagonal():
     """)
 
 
-def test_free():
-
-    p = Program("""
-
-    % TODO: In the booleanization conversion, we ought to automatically add the
-    % $free delayed constraints.
-    f(X,Y).
-    f(3,Y).
-    f(X,4).
-    f(3,4).
-
-    g(h(X,X), p(Y,Y)) += f(X,Y) * p(Y).
-
-    q(X,X',Y,Y') += g(h(X,X'),p(Y,Y')).   % will have X=X' and Y=Y'
-    goal += f(X,X).
-
-    """)
-
-    input_type = Program("""
-    p(X) :- d(X).
-
-    """, 'd(_).')
-
-    rewrites = """
-    d(4).
-    """
-
-    m = p.type_analysis(input_type, rewrites)
-
-    # [2021-08-17 Tue] Updated Program to remove rules that cover others
-    # (commented out rules below are covered).
-    m.assert_equal("""
-
-    f(X,Y) += $free(X), $free(Y).
-    f(3,Y) += $free(Y).
-    f(X,4) += $free(X).
-    f(3,4).
-
-    g(h(3, 3), p(Y, Y)) :- d(Y).
-    g(h(X, X), p(Y, Y)) :- d(Y), $free(X).
-    % g(h(3, 3), p(4, 4)).
-    % g(h(X, X), p(4, 4)) :- $free(X).
-    goal.
-    p(X) :- d(X).
-    % q(3, 3, Y', Y') :- d(Y').
-    % q(3, 3, 4, 4).
-    % q(X', X', 4, 4) :- $free(X').
-    q(X',X',Y',Y') :- d(Y'), $free(X').
-    q(3,3,Y',Y') :- d(Y').
-
-    """)
-
-
 def test_earley():
     #from dyna.benchmarks.earley import Earley
     #b = Earley()
@@ -474,7 +423,9 @@ def test_earley():
 
 
 def test_slashed_unary_cky():
-
+    # Formerly asserted `$free(I) * $free(K)` for the slash item `p(X,I,K)/p(X',I,K)`
+    # in the type chart.  The sound replacement: both spans I and K are shared
+    # between numerator and denominator and so cancel under the division.
     p = Program("""
     (p(X0,I0,K0)/p(X0,I0,K0)).
     (p(X,I,K)/p(X0,I0,K0)) += rewrite(X,Y) * p(Y,I,K)/p(X0,I0,K0).
@@ -495,38 +446,18 @@ def test_slashed_unary_cky():
 
     """, 'w(_). k(_). n(_).')
 
-    rewrites = """
-    k(root).
-    n(0).
-    $fail :- n(X), k(X).
-    k(X) :- $free(X), k(X).
-    n(X) :- $free(X), n(X).
-    """
-
-    m = p.type_analysis(types, rewrites)
-    m.assert_equal("""
-
-    % derived types
-%    (p(X0, I0, K0) / p(X0, I0, K0)).                   % base case
-%    (p(X, I, K) / p(X', I, K)) :- k(X), k(X').         % I=I', J=J'
-    other(p(X, I, K)) :- k(X), n(I), n(K).
-    other(goal).
-    goal.
-    p(X0, I0, K0) += k(X0) * n(I0) * n(K0).
-
-    (p(X, I, K) / p(X, I, K)) :- $free(X) * $free(I) * $free(K).
-    (p(X, I, K) / p(X', I, K)) :- k(X) * k(X') * $free(I) * $free(K).
-
-    % input types
-    word(X,I,K) :- w(X), n(I), n(K).
-    length(I) :- n(I).
-    rewrite(X,Y) :- k(X), k(Y).
-    tag(X,Y) :- k(X), w(Y).
-    rewrite(X,Y,Z) :- k(X), k(Y), k(Z).
-
+    # both spans cancel under the division, so `p(X,I,K)/p(X',I,K)` reduces to
+    # `slash1(X,X')` (just the nonterminal pair).
+    gen_functor.reset()
+    QuotientProjection(p, types).assert_equal("""
+    slash1(X0,X0).
+    slash1(X,X0) += rewrite(X,Y) * slash1(Y,X0).
+    other(p(X,I,K)) += tag(X,Y) * word(Y,I,K).
+    other(p(X,I,K)) += rewrite(X,Y,Z) * p(Y,I,J) * p(Z,J,K).
+    p(X,I,K) += slash1(X,X0) * other(p(X0,I,K)).
+    other(goal) += length(N) * p(root,0,N).
+    goal += other(goal).
     """)
-
-#    q = m.runtime_polynomial(verbose=1)
 
 
 def test_pda():
@@ -725,7 +656,11 @@ def test_cky_less():
 
 
 def test_slash_binary_cky():
-
+    # Formerly asserted `$free(I')` for the slash item `c(A,I',K)/c(B',I',J')` in
+    # the type chart.  The sound replacement: only the span-start I' is shared
+    # between numerator and denominator (the derivation recovers the sharing --
+    # the raw slash rule writes `c(A,I,K)/c(B',I',J')` with distinct spans), so
+    # only I' cancels; the ends K, J' stay.
     cky = Program("""
     goal += c(s,0,N) * len(N).
     c(A,I,K) += rewrite(A,B) * word(B,I,K).
@@ -743,30 +678,16 @@ def test_slash_binary_cky():
 
     """, 'k(_). n(_). w(_).', '')
 
-    rewrites = """
-%    k(s).
-%    n(0).
-
-    $fail :- k(X), w(X).
-    """
-
     sl = cky.slash("c(B',I',J')", positions={2: 1})
 
-    S = sl.type_analysis(input_type, rewrites)
-
-    S.assert_equal("""
-    (c(B', I', J') / c(B', I', J')) += $free(J') * $free(I') * $free(B').
-    (c(A, I', K) / c(B', I', J')) += k(B') * n(J') * $free(I') * k(A) * n(K).
-%    $other(goal).
-    $other(c(A, I, K)) += n(K) * k(A) * n(I).
-    c($X0, I', $X2) += n($X2) * n(I') * k($X0).
-    goal.
-    word(X, I, K) += w(X) * n(K) * n(I).
-    rewrite(X, Y, Z) += k(Y) * k(Z) * k(X).
-    rewrite(X, Y) += k(X) * k(Y).
-    rewrite(X, Y) += w(Y) * k(X).
-    len(I) += n(I).
+    # only the shared span-start I' cancels (the ends K, J' stay), reducing the
+    # 6-place `c/c` item to `slash1(A,K,B',J')`; the projection preserves values.
+    qp = QuotientProjection(sl, input_type)
+    D = Program("""
+    rewrite(s,np,vp)+=1. rewrite(np,"a")+=1. rewrite(vp,"b")+=1.
+    word("a",0,1)+=1. word("b",1,2)+=1. len(2)+=1.
     """)
+    (qp + D).sol().user_query('goal').assert_equal((cky + D).sol().user_query('goal'))
 
 
 def test_word_list():

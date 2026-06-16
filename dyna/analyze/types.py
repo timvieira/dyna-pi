@@ -31,21 +31,16 @@ _debug = debug
 #_______________________________________________________________________________
 # Booleanization / type program preprocessing
 
-def add_free_constraints(r):
-    assert isinstance(r, Rule), r
-    #r = deref(r)
-    return Rule(r.head, *r.body, *[Term('$free', v) for v in term_vars(r.head) - term_vars(r.body)])
-
 def remove_constants(p, r):
     assert isinstance(r, Rule), r
     return Rule(r.head, *[b for b in r.body if not p.is_const(b)])
 
 def to_type_program(p):
-    q = TransformedProgram('booleanize', p, [
-        # create $free(X) constraints for each non-range-restricted variable X in the rule.
-        remove_constants(p, add_free_constraints(r))
-        for r in p
-    ])
+    # The type analysis assumes range-restricted input (run range-restriction
+    # normalization first), so there is no openness to mark: `head - body` is
+    # empty for every rule.  The old `$free`/`ALLOW_FREE_MERGE` apparatus that
+    # represented openness here was unsound on diagonals and has been removed.
+    q = TransformedProgram('booleanize', p, [remove_constants(p, r) for r in p])
     q.semiring = Boolean
     return q
 
@@ -72,8 +67,7 @@ class TypeAnalyzer:
     propagation system and relaxation steps.
     """
 
-    # XXX: insts are an experimental feature
-    def __init__(self, program, input_type, rewrites, max_depth=5, use_insts=True, verbosity=0, basic=True):
+    def __init__(self, program, input_type, rewrites, max_depth=5, verbosity=0, basic=True):
         if isinstance(input_type, str): input_type = Program(input_type)
         if isinstance(rewrites, str): rewrites = Rewrites(rewrites)
 
@@ -92,7 +86,6 @@ class TypeAnalyzer:
         self.program.set_output_types(self.outputs)
 
         # configuration options
-        self.use_insts = use_insts
         self.max_depth = max_depth
         self.rewrites = rewrites
 
@@ -202,7 +195,7 @@ class TypeAnalyzer:
 
     def _relax(self, r):
         _r = r
-        r = self.rewrites(r, USE_INSTS=self.use_insts)
+        r = self.rewrites(r)
         if r is None: return
         # Relax tall terms
         h = truncate_term(r.head, self.max_depth)
