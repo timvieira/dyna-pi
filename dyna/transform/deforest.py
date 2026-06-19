@@ -17,6 +17,7 @@ this producer/consumer pattern.
 """
 
 from dataclasses import dataclass
+from typing import Optional
 
 from dyna import Product, Rule, Subst, Term, TransformedProgram, Var, fresh
 
@@ -30,12 +31,7 @@ def CONS(head, tail):
 
 @dataclass(frozen=True)
 class DifferenceListDeforestationSpec:
-    """Names used by the difference-list/intersection idiom.
-
-    The defaults match the example in the tests.  `span_fn` and `suffix_fn` may
-    be left as `None`; the transform will choose `$span`/`$suffix`, avoiding
-    collisions with symbols already present in the program.
-    """
+    """Names used by the difference-list/intersection idiom."""
 
     gen_fn: str = 'gen'
     equal_fn: str = 'equal'
@@ -44,8 +40,8 @@ class DifferenceListDeforestationSpec:
     root_fn: str = 'root'
     source_fn: str = 'source_string'
     eq_fn: str = 'eq'
-    span_fn: str | None = None
-    suffix_fn: str | None = None
+    span_fn: Optional[str] = None
+    suffix_fn: Optional[str] = None
 
 
 def _matches(rule, head_pattern, body_patterns):
@@ -85,15 +81,54 @@ def _require_at_least_one(program, head_pattern, body_patterns, label):
     return found
 
 
+def _source_variables_for_terminal(rule, spec):
+    A = Var('A'); Acc = Var('Acc'); W = Var('W')
+    [(subst, _align, _remaining)] = list(_matches(
+        rule,
+        Term(spec.gen_fn, A, Acc, CONS(W, Acc)),
+        [Term(spec.rule_term_fn, A, W)],
+    ))
+    return subst(A), subst(Acc), subst(W)
+
+
+def _source_variables_for_binary(rule, spec):
+    A = Var('A'); Acc = Var('Acc'); X = Var('X')
+    B = Var('B'); C = Var('C'); Mid = Var('Mid')
+    [(subst, _align, _remaining)] = list(_matches(
+        rule,
+        Term(spec.gen_fn, A, Acc, X),
+        [
+            Term(spec.rule_bin_fn, A, B, C),
+            Term(spec.gen_fn, C, Acc, Mid),
+            Term(spec.gen_fn, B, Mid, X),
+        ],
+    ))
+    return subst(A), subst(Acc), subst(X), subst(B), subst(C), subst(Mid)
+
+
+def _source_variables_for_goal(rule, spec):
+    S = Var('S'); Str = Var('Str'); In = Var('In')
+    [(subst, _align, _remaining)] = list(_matches(
+        rule,
+        Var('Head'),
+        [
+            Term(spec.root_fn, S),
+            Term(spec.gen_fn, S, NIL, Str),
+            Term(spec.source_fn, In),
+            Term(spec.equal_fn, Str, In),
+        ],
+    ))
+    return subst(S), subst(In)
+
+
 def _compile_difference_list_intersection(parent, spec):
     span_fn = spec.span_fn or parent._gen_functor('$span')
     suffix_fn = spec.suffix_fn or parent._gen_functor('$suffix')
 
-    # ------------------------------------------------------------------
     # Recognize terminal generator rule:
     #   gen(A, Acc, [W|Acc]) += rule_term(A, W) * extra.
     A = Var('A'); Acc = Var('Acc'); W = Var('W')
-    term_i, term_rule, term_subst, term_remaining = _require_one(
+    term_i, term_rule, _term_subst, term_remaining = _require_one(
         parent,
         Term(spec.gen_fn, A, Acc, CONS(W, Acc)),
         [Term(spec.rule_term_fn, A, W)],
@@ -104,7 +139,7 @@ def _compile_difference_list_intersection(parent, spec):
     #   gen(A, Acc, X) += rule_bin(A,B,C) * gen(C,Acc,Mid) * gen(B,Mid,X) * extra.
     A = Var('A'); Acc = Var('Acc'); X = Var('X')
     B = Var('B'); C = Var('C'); Mid = Var('Mid')
-    bin_i, bin_rule, bin_subst, bin_remaining = _require_one(
+    bin_i, bin_rule, _bin_subst, bin_remaining = _require_one(
         parent,
         Term(spec.gen_fn, A, Acc, X),
         [
@@ -148,8 +183,7 @@ def _compile_difference_list_intersection(parent, spec):
     remove = {term_i, bin_i, base_i, rec_i, *(i for i, *_ in goal_matches)}
     new_rules = [rule for i, rule in enumerate(parent) if i not in remove]
 
-    # ------------------------------------------------------------------
-    # Suffix-state automaton for the observed source list.
+    # Suffix-state automaton for the observed source list:
     #   $suffix(In)   += source_string(In).
     #   $suffix(Rest) += $suffix([V|Rest]).
     In = Var('In')
@@ -166,17 +200,7 @@ def _compile_difference_list_intersection(parent, spec):
 
     # Terminal residual:
     #   span(A, [V|Acc], Acc) += suffix([V|Acc]) * rule_term(A,W) * eq(W,V) * extra.
-    A = term_subst(Var('A'))   # will not work: use stable pattern vars below
-    # The comments above describe the source-level binding.  Recreate the source
-    # pattern variables so we can read their substitutions from the match.
-    TA = Var('A'); TAcc = Var('Acc'); TW = Var('W')
-    # Re-match in a tiny local scope to get handles for the actual source variables.
-    # This avoids relying on variable names: the substitutions map pattern Var
-    # objects to the variables/terms in the source rule.
-    term_pat_head = Term(spec.gen_fn, TA, TAcc, CONS(TW, TAcc))
-    term_pat_body = [Term(spec.rule_term_fn, TA, TW)]
-    [(term_subst2, _align, _remaining)] = list(_matches(term_rule, term_pat_head, term_pat_body))
-    A = term_subst2(TA); Acc = term_subst2(TAcc); W = term_subst2(TW)
+    A, Acc, W = _source_variables_for_terminal(term_rule, spec)
     V = Var('V')
     start_tail = CONS(V, Acc)
     term_extra = [term_rule.body[k] for k in term_remaining]
@@ -190,17 +214,7 @@ def _compile_difference_list_intersection(parent, spec):
 
     # Binary residual:
     #   span(A, X, Acc) += rule_bin(A,B,C) * span(B,X,Mid) * span(C,Mid,Acc) * extra.
-    BA = Var('A'); BAcc = Var('Acc'); BX = Var('X')
-    BB = Var('B'); BC = Var('C'); BMid = Var('Mid')
-    bin_pat_head = Term(spec.gen_fn, BA, BAcc, BX)
-    bin_pat_body = [
-        Term(spec.rule_bin_fn, BA, BB, BC),
-        Term(spec.gen_fn, BC, BAcc, BMid),
-        Term(spec.gen_fn, BB, BMid, BX),
-    ]
-    [(bin_subst2, _align, _remaining)] = list(_matches(bin_rule, bin_pat_head, bin_pat_body))
-    A = bin_subst2(BA); Acc = bin_subst2(BAcc); X = bin_subst2(BX)
-    B = bin_subst2(BB); C = bin_subst2(BC); Mid = bin_subst2(BMid)
+    A, Acc, X, B, C, Mid = _source_variables_for_binary(bin_rule, spec)
     bin_extra = [bin_rule.body[k] for k in bin_remaining]
     new_rules.append(fresh(Rule(
         Term(span_fn, A, X, Acc),
@@ -212,17 +226,7 @@ def _compile_difference_list_intersection(parent, spec):
 
     # Top-level residual(s): replace root/gen/source/equal by root/source/span.
     for _i, goal_rule, _subst, remaining in goal_matches:
-        GS = Var('S'); GStr = Var('Str'); GIn = Var('In')
-        H = Var('Head')
-        goal_pat_head = H
-        goal_pat_body = [
-            Term(spec.root_fn, GS),
-            Term(spec.gen_fn, GS, NIL, GStr),
-            Term(spec.source_fn, GIn),
-            Term(spec.equal_fn, GStr, GIn),
-        ]
-        [(goal_subst, _align, _remaining)] = list(_matches(goal_rule, goal_pat_head, goal_pat_body))
-        S = goal_subst(GS); In = goal_subst(GIn)
+        S, In = _source_variables_for_goal(goal_rule, spec)
         extra = [goal_rule.body[k] for k in remaining]
         new_rules.append(fresh(Rule(
             goal_rule.head,
