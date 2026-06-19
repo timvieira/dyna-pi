@@ -23,5 +23,10 @@ from dyna.derivations import Derivation, Derivations
 from dyna import derivations
 
 from dyna.transform import Fold, Unfold, Slash, LCT
+from dyna.transform.deforest import (
+    DeforestDifferenceLists,
+    DifferenceListDeforestationSpec,
+    deforest_difference_lists,
+)
 from dyna.transform.measure import make_smt_measure
 from dyna.propagate import ConstraintPropagation
