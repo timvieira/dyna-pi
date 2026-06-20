@@ -15,7 +15,9 @@ class BaseSolver:
     def __init__(self, program, tol=1e-8):
         #assert isinstance(program, Program), program
 
-        self.builtins = Builtins(None)
+        # Pass `self` (the solver) so builtins with a solver-callback (e.g. the
+        # indirect-evaluation `is/2`) can query the chart.
+        self.builtins = Builtins(self)
 
         self.program = program
         self.Weight = self.program.Semiring if self.program.Semiring is not None else Float

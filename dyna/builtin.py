@@ -5,10 +5,10 @@ Built-in relations.
 import numpy as np
 from dyna.term import (
     unify, Var, Term, unifies, deref, snap, fresh, covers, is_var, Product,
-    canonicalize, same
+    canonicalize, same, is_ground
 )
 from dyna.rule import Rule
-from dyna.exceptions import InstFault
+from dyna.exceptions import InstFault, NotBuiltin
 from dyna import syntax
 #from dyna.util import to_cons, topython_list
 
@@ -61,6 +61,14 @@ cmps = {'<':  lambda x, y: x < y,
         '==': lambda x, y: x == y,
         '<=': lambda x, y: x <= y,
         '>=': lambda x, y: x >= y}
+
+
+# The operators the `is` RHS dispatch (Builtins._dispatch) knows how to evaluate.
+# Single source of truth used at the dispatch fall-through to distinguish a recognized
+# operator whose args aren't ready yet (-> InstFault, delay) from an unrecognized RHS
+# operator, i.e. a user predicate (-> NotBuiltin, route to indirect evaluation).
+IS_RHS_OPS = {'-', '+', 'abs', 'str', 'int', '!',
+              '*', '/', 'min', 'max', 'range'} | set(cmps)
 
 
 # (functor, arity) signatures of every recognized builtin.  This is the single
@@ -124,6 +132,48 @@ class Builtins:
                 return True
 
     def __call__(self, q):
+        # Run the pure builtin dispatch.  If the `is` RHS operator is not a builtin (a
+        # user predicate), `_dispatch` raises NotBuiltin and we fall back to indirect
+        # evaluation (a solver callback).  InstFault (wrong mode / not ready) propagates
+        # as before, so `is_ready` can delay the subgoal.
+        try:
+            yield from self._dispatch(q)
+        except NotBuiltin:
+            yield from self._indirect_is(q)
+
+    def _indirect_is(self, q):
+        # Indirect evaluation of `Value is UserItem`: evaluate the user item with a
+        # FULLY-CONVERGED sub-query (`user_query`) and bind Value to its value.  We do
+        # NOT peek at the in-progress chart (its values may not be converged; reading
+        # them would need retraction -- a different solver).  `is/2` is a constraint: it
+        # contributes semiring one per solution (zero if none); the value flows to the
+        # LHS via unification.  Guards: (1) mode `-Value is +Key` only -- reject
+        # `+Value is -Key`; (2) every result head/value must be GROUND (user_query
+        # CONSOLIDATES, so ground heads are automatically disjoint).
+        # NOTE: no stratification check yet -- a predicate reaching itself through `is/2`
+        # will not terminate.  (Pure stratified use is transformable back to pure dyna.)
+        [s, v, k] = deref(q)
+        v = snap(v)
+        prog = getattr(self.solver, 'program', None)
+        if prog is None and hasattr(self.solver, 'user_query'):
+            prog = self.solver        # the wiring passed a Program directly
+        if prog is None:
+            raise InstFault(f'`{q}`: indirect `is` requires a solver/program context.')
+        if not is_var(v):
+            raise InstFault(
+                f'`{q}`: unsupported mode `+Value is -Key` for indirect `is` '
+                f'(cannot invert a value back to a key).'
+            )
+        for r in prog.user_query(fresh(k)).rules:
+            body = list(r.body)
+            if not (is_ground(r.head) and len(body) == 1 and is_ground(body[0])):
+                raise InstFault(
+                    f'`{q}`: indirect `is` requires ground results; got {r!r}.'
+                )
+            for _ in unify(k, r.head):
+                yield from unify(v, body[0])
+
+    def _dispatch(self, q):
         [s,v,k] = q = deref(q)
 
         v = snap(v)
@@ -362,4 +412,13 @@ class Builtins:
                         yield from unify(X, x)
                     return
 
-            raise InstFault(f'query `{q}` is not supported in this mode')
+            # Fall-through: no op-block handled `k`.  Distinguish a recognized operator
+            # whose args aren't ready (delay -> InstFault) from an unrecognized RHS
+            # operator -- a user predicate -> NotBuiltin, which `__call__` turns into
+            # indirect evaluation.
+            if k.fn in IS_RHS_OPS:
+                raise InstFault(f'query `{q}` is not supported in this mode')
+            raise NotBuiltin(
+                f'`{q}`: RHS operator {k.fn!r}/{k.arity} is not a builtin '
+                f'(treating as indirect evaluation).'
+            )
