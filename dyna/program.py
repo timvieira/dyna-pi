@@ -830,7 +830,7 @@ input/output declarations</summary>\
 
     def user_query(self, q):
         "Query the chart for a subset of items matching the query `q`."
-        return self.solver2().user_query(q)
+        return self.solver2().user_query(q)    # TODO: why doesn't this go thru the usual solver chooser?
 
     def assert_equal_query(self, query, want, **kwargs):
         "Check that the `query` against `self` is equal to `want`."
@@ -872,8 +872,12 @@ input/output declarations</summary>\
         two passes of `scc_solver`).
         """
         if solver is None:
-            solver = 1 if self.is_range_restricted() else 2
-        return Program.solver if solver == 1 else Program.solver2
+            return Program.solver if self.is_range_restricted() else Program.solver2
+        if solver == 1:
+            return Program.solver
+        if solver == 2:
+            return Program.solver2
+        return solver
 
     # TODO: add the precision option like agenda.
     def fc(self, *, max_iter=None, chart=None, verbose=False, proj=lambda p: p):
