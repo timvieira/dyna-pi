@@ -1678,6 +1678,12 @@ input/output declarations</summary>\
         return self.partial_megafolds(*args, **kwargs).filter(lambda x: x.safe_by_smt)
 
     @to_collection
+    def megafolds_unit(self, *args, **kwargs):
+        "Enumerate megafolds safe under the concrete unit measure (fast on deep chains)."
+        # pylint: disable=no-member
+        return self.partial_megafolds(*args, **kwargs).filter(lambda x: x.safe_by_unit)
+
+    @to_collection
     def folds_by(self, r, js=None, defs=None):
         from dyna.transform.fold import Fold
         if isinstance(r, str): [r] = Program(r)
@@ -1750,6 +1756,19 @@ input/output declarations</summary>\
     def safe_by_smt(self):
         "Check the measure-based safety condition"
         return self.measure(self).is_safe()
+
+    @cached_property
+    def unit_measure(self):
+        "Concrete unit-measure safety checker (all rule measures = 1): fast on deep transform "
+        "chains where the symbolic SMT measure blows up. Sound (a satisfying measure is a proof) "
+        "but incomplete (may reject folds that need a non-uniform measure)."
+        from dyna.transform.measure import make_smt_measure
+        return make_smt_measure(self.root, symbolic=False)
+
+    @cached_property
+    def safe_by_unit(self):
+        "Measure-safety under the concrete all-ones measure (fast; sound but incomplete)."
+        return self.unit_measure(self).is_safe()
 
     #___________________________________________________________________________
     # Program specialization methods

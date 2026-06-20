@@ -21,6 +21,8 @@ class measure_safety:
         self._id = 0
 
     def is_safe(self):
+        if all(c is True or c is False for c in self._safe):
+            return all(self._safe)      # concrete (unit) measures -> no SMT solve needed
         s = z3.Solver()
         s.reset()
         s.add(self._safe)
@@ -63,11 +65,14 @@ class measure_safety:
 
 class Measure:
 
-    def __init__(self):
+    def __init__(self, symbolic=True):
         self.measures = {}
         self._var_id = 0
+        self.symbolic = symbolic
 
     def new_var(self):
+        if not self.symbolic:
+            return (1, [])          # concrete unit measure: fast, no symbolic z3 blowup on deep chains
         x = f'V{self._var_id}'
         self._var_id += 1
         x = z3.Int(x)
@@ -522,7 +527,7 @@ class Interval:
 Interval.zero = Interval(0, 0)
 
 
-def make_smt_measure(p):
-    m = Measure()
+def make_smt_measure(p, symbolic=True):
+    m = Measure(symbolic=symbolic)
     m.add_ref(p)
     return m
