@@ -122,6 +122,40 @@ class Unfold(TransformedProgram):
         # implementation shortcut: use the undo (fold) program's derivation mapping
         return self.undo.Transform(self.undo.transform(d), self.parent)
 
+    def compute_measure(self, M):
+        "Fold-unfold safety measure for this (generalized) unfold. `M` is the Measure context."
+        # Common-ancestor precondition; see Fold.compute_measure for rationale.
+        assert self.parent.root is self.defs.root, (
+            f"Unfold's parent and defs must share a root program "
+            f"(got parent.root id={id(self.parent.root)}, "
+            f"defs.root id={id(self.defs.root)}). Build defs via "
+            f"`<root>.define(rule_text)` against the unfold's root."
+        )
+        # Freshness precondition (returns unsafe measure rather than raising;
+        # see Fold.compute_measure for rationale).
+        if M._freshness_violations(self.parent, self.defs):
+            return M.zero_measure(self)
+
+        m_new = [None]*len(self)
+        m_parent = M(self.parent); m_defs = M(self.defs)
+
+        for N, r in enumerate(self):
+            if N in self.new2def:
+                m_new[N] = m_parent.m[self.i] + m_defs.m[self.new2def[N]]
+            else:
+                m_new[N] = m_parent.m[self.parent.rules.index(r)]
+
+        # Check the safety conditions for generalized unfold.
+        P = self.i
+        safe = m_parent._safe + m_defs._safe
+        for (_,D) in self.new2def.items():
+            # don't count the size of the subgoal that we replaced in the unfold action
+            extra = M.min_size(self.parent.rules[P].body[:self.j]) + M.min_size(self.parent.rules[P].body[self.j+1:])
+            safe.append(
+                    (m_parent.m[P] + m_defs.m[D]).lo + extra > 0
+            )
+        return M.safety(m_new, self, safe)
+
 
 
 inf = float('inf')

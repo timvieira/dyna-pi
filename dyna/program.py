@@ -1770,6 +1770,18 @@ input/output declarations</summary>\
         "Measure-safety under the concrete all-ones measure (fast; sound but incomplete)."
         return self.unit_measure(self).is_safe()
 
+    def compute_measure(self, M):
+        """Build this program's clause measure against the Measure context `M`.
+
+        Base case: a program with no transformation history `M` can track. The
+        measure's reference program gets its initial (fresh-variable) measure
+        from `M.add_ref` (pre-cached, so it never reaches here); any other
+        program is out of range and gets the all-zero, unsafe measure.
+        Transform subclasses override this to derive a measure from their
+        parents.
+        """
+        return M.zero_measure(self)
+
     #___________________________________________________________________________
     # Program specialization methods
 
@@ -2191,6 +2203,21 @@ class TransformedProgram(Program):
         )
         self.root = parent.root
 
+    def compute_measure(self, M):
+        # The `fresh`-rename wrapper preserves each rule's measure; delegate to
+        # the parent (this is a bare TransformedProgram, not a dedicated class).
+        if self.name == 'fresh':  # pragma: no cover
+            return M(self.parent)
+        # An unknown transform with no measure of its own: treat as unsafe so
+        # search/filter pipelines reject it rather than trust an unverified
+        # rewrite. Give the transform a `compute_measure(self, M)` to fix this.
+        import warnings
+        warnings.warn(
+            f'No measure for transformation of type {type(self).__name__}; '
+            f'treating as unsafe. Give it a `compute_measure(self, M)` method.'
+        )
+        return M.zero_measure(self)
+
 
 # TODO: add a check for overlap -- if we add a new rule it needs a distinct name
 # space (i.e., a sufficient "fresh" name) or else we run the risk of this
@@ -2210,6 +2237,21 @@ class Define(TransformedProgram):
         self._new_ix = range(len(parent), len(parent) + len(defs))
         self.defs = defs
         super().__init__(f'define({defs})', parent, list(parent) + list(defs))
+
+    def compute_measure(self, M):
+        "Fold-unfold safety measure: inherit parent rule measures, give each new rule a fresh var. `M` is the Measure context."
+        n = len(self.defs)
+        assert len(self.rules[-n:]) == n
+        m_parent = M(self.parent)
+        safety = list(m_parent._safe)   # copy, because we will append
+        m_new = [None] * len(self)
+        for i in self._old_ix:
+            m_new[i] = m_parent.m[i]   # copy
+        for i in self._new_ix:
+            x, x_s = M.new_var()
+            safety.extend(x_s)
+            m_new[i] = M.Interval(x, x)
+        return M.safety(m_new, self, safety)
 
 
 # TODO: move to transform submodule

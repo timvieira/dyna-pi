@@ -4,12 +4,11 @@ Fold-unfold safety measures
 import z3
 from arsenal import colors
 
-from dyna import Program, TransformedProgram
+from dyna import Program
 #from dyna.analyze.abbreviate import Abbreviate
 from dyna.derivations import Derivation, Product
 from dyna.program import Define
 from dyna.term import fresh, unifies
-from dyna.transform import Fold, Unfold, Slash, LCT
 
 
 class measure_safety:
@@ -69,6 +68,14 @@ class Measure:
         self.measures = {}
         self._var_id = 0
         self.symbolic = symbolic
+        # Constructors exposed so each transform's `compute_measure(M)` method
+        # can build measures through the Measure context `M` rather than
+        # importing them from this module. This keeps the transforms agnostic of
+        # the measure representation and decoupled from this module entirely (it
+        # imports `dyna`, so a transform reaching back in could risk a cycle).
+        self.Interval = Interval
+        self.Min = Min
+        self.Max = Max
 
     def new_var(self):
         if not self.symbolic:
@@ -115,48 +122,24 @@ class Measure:
         return self(x).is_safe()
 
     def compute(self, new):
-        if isinstance(new, Unfold):
-            return self._measure_unfold(new)
-        elif isinstance(new, Fold):
-            return self._measure_fold(new)
-        elif isinstance(new, TransformedProgram) and new.name == 'fresh':  # pragma: no cover
-            return self(new.parent)
-        elif isinstance(new, Define):
-            return self._measure_define(new)
-        elif isinstance(new, Slash):
-            return self._measure_slash(new)
-        elif isinstance(new, LCT):
-            return self._measure_lct(new)
-#        elif isinstance(new, Abbreviate):
-#            return self._measure_abbreviate(new)
-        else:
-            assert not isinstance(new, TransformedProgram), [new.name, type(new)]
-            import warnings
-            warnings.warn(
-                f'Measure-based safety checking could not produce a measure for '
-                f'transformation of type {type(new).__name__}.\n'
-                f'  If this is a `defs` argument to fold/unfold, build it via '
-                f'`<root_program>.define(rule_text)` so it shares the operation\'s '
-                f'root and the SMT measure can track it.\n'
-                f'program=\n{new}'
-            )
-            return measure_safety([Interval(0,0)]*len(new), new, safe=[False])
-#            raise KeyError((type(new).__name__, new))
+        # Cache-miss handler. Each Program builds its own measure against this
+        # Measure context via `compute_measure` (transforms derive from their
+        # parents; the dispatch lives on the program classes, not here). The
+        # reference program's initial measure is pre-cached by `add_ref`, so it
+        # never reaches this path.
+        return new.compute_measure(self)
 
-    # XXX: EXPERIMENTAL
-    def _measure_define(self, new):
-        n = len(new.defs)
-        assert len(new.rules[-n:]) == n
-        m_parent = self(new.parent)
-        safety = list(m_parent._safe)   # copy, because we will append
-        m_new = [None] * len(new)
-        for i in new._old_ix:
-            m_new[i] = m_parent.m[i]   # copy
-        for i in new._new_ix:
-            x, x_s = self.new_var()
-            safety.extend(x_s)
-            m_new[i] = Interval(x, x)
-        return measure_safety(m_new, new, safety)
+    # ----- constructors / shared measures exposed to transform `compute_measure(M)` methods -----
+    # These let a transform build its measure through the Measure context `M` instead of
+    # importing this module, keeping the transforms decoupled from the measure representation.
+
+    def safety(self, m, p, safe):
+        "Construct a measure_safety record."
+        return measure_safety(m, p, safe)
+
+    def zero_measure(self, p):
+        "An all-zero, unsafe measure for `p` (freshness violations / unknown transforms)."
+        return measure_safety([Interval(0, 0)] * len(p), p, safe=[False])
 
 #    def _measure_abbreviate(self, new):
 #        m_parent = self(new.parent)
@@ -184,12 +167,6 @@ class Measure:
 #        # a reversible fold is safe as long as its parent is safe.
 #        safe = list(m_parent._safe)
 #        return measure_safety(m_new, new, safe)
-
-    def _measure_fold(self, new):
-        assert isinstance(new, Fold) #and new.undo == new.parent
-        assert new.partially_safe
-        #if not new.partially_safe: return self._measure_reversible_fold(new)
-        return self._measure_generalized_fold(new)
 
     def _freshness_violations(self, parent, defs):
         """For fold/unfold safety: every Define operation in `defs`'s lineage
@@ -219,129 +196,6 @@ class Measure:
                         violations.append((d_rule, p_rule.head))
                         break
         return violations
-
-    def _measure_generalized_fold(self, new):
-        # Common-ancestor precondition. The fold's rule-measure relations only
-        # make sense if `parent` and `defs` descend from the same root program
-        # (so their measure variables were allocated against a shared rule-index
-        # basis). Build defs via `<root>.define(rule_text)` where <root> is the
-        # same root program as the fold's parent. We KEEP this as an assertion
-        # because failing it indicates a usage error (not a safety verdict) —
-        # the measure simply cannot be computed when measure-variable bases differ.
-        assert new.parent.root is new.defs.root, (
-            f"Fold's parent and defs must share a root program "
-            f"(got parent.root id={id(new.parent.root)}, "
-            f"defs.root id={id(new.defs.root)}). Build defs via "
-            f"`<root>.define(rule_text)` against the fold's root."
-        )
-        # Freshness precondition: any rule in `defs` not already in `parent`
-        # (and not in the shared root) introduces an equation the algebra
-        # cannot verify against parent's existing definitions. Return an
-        # unsafe measure rather than raising, so search/filter pipelines
-        # using `m.safe` reject these candidates cleanly.
-        violations = self._freshness_violations(new.parent, new.defs)
-        if violations:
-            return measure_safety([Interval(0, 0)] * len(new), new, safe=[False])
-        m_new = [None]*len(new)
-        m_parent = self(new.parent); m_defs = self(new.defs)
-        diffs = [m_parent.m[P] - m_defs.m[D] for P,D in new.par2def.items()]
-        m_r = Interval(Min([x.lo for x in diffs]), Max([x.hi for x in diffs]))
-        for N, r in enumerate(new):
-            if N == new.i:
-                m_new[N] = m_r
-            else:
-                m_new[N] = m_parent.m[new.parent.rules.index(r)]
-        # Check the safety conditions for generalized fold.
-        safe = m_parent._safe + m_defs._safe
-        for (D,P) in new.def2par.items():
-            extra = self.min_size(new.bookkeeping[P].left) + self.min_size(new.bookkeeping[P].right)
-            safe.append(
-                (m_parent.m[P] - m_defs.m[D]).lo + extra > 0
-            )
-        return measure_safety(m_new, new, safe)
-
-    def _measure_unfold(self, new):
-        assert isinstance(new, Unfold) #and new.undo == new.parent
-
-        # Common-ancestor precondition; see _measure_generalized_fold for rationale.
-        assert new.parent.root is new.defs.root, (
-            f"Unfold's parent and defs must share a root program "
-            f"(got parent.root id={id(new.parent.root)}, "
-            f"defs.root id={id(new.defs.root)}). Build defs via "
-            f"`<root>.define(rule_text)` against the unfold's root."
-        )
-        # Freshness precondition (returns unsafe measure rather than raising;
-        # see _measure_generalized_fold for rationale).
-        violations = self._freshness_violations(new.parent, new.defs)
-        if violations:
-            return measure_safety([Interval(0, 0)] * len(new), new, safe=[False])
-
-        m_new = [None]*len(new)
-        m_parent = self(new.parent); m_defs = self(new.defs)
-
-        for N, r in enumerate(new):
-            if N in new.new2def:
-                m_new[N] = m_parent.m[new.i] + m_defs.m[new.new2def[N]]
-            else:
-                m_new[N] = m_parent.m[new.parent.rules.index(r)]
-
-        # Check the safety conditions for generalized unfold.
-        P = new.i
-        safe = m_parent._safe + m_defs._safe
-        for (_,D) in new.new2def.items():
-            # don't count the size of the subgoal that we replaced in the unfold action
-            extra = self.min_size(new.parent.rules[P].body[:new.j]) + self.min_size(new.parent.rules[P].body[new.j+1:])
-            safe.append(
-                    (m_parent.m[P] + m_defs.m[D]).lo + extra > 0
-            )
-        return measure_safety(m_new, new, safe)
-
-    def _measure_slash(self, new):
-        assert isinstance(new, Slash)
-
-        m_par = self(new.parent)
-        m = [None] * len(new)
-
-        # Each rule of the new program falls into one of 6 categories: ss, oo,
-        # o, rso, ro, base.
-
-        # Each rule in (ss ∪ oo ∪ o) inherits its clause measure from the rule
-        # in the parent that gave rise to it.
-        for i, r in new.ss.items():  m[r._index] = m_par.m[i]
-        for i, r in new.oo.items():  m[r._index] = m_par.m[i]
-        for i, r in new.o.items():   m[r._index] = m_par.m[i]
-
-        # Each of the remaining rules (those in {base} ∪ rso ∪ ro), have a
-        # measure of zero.
-        if 1:                        m[new.base._index] = Interval(0,0)
-        for r in new.rso.values():   m[r._index] = Interval(0,0)
-        for r in new.ro.values():    m[r._index] = Interval(0,0)
-
-        return measure_safety(m, new, m_par._safe)
-
-    def _measure_lct(self, new):
-        assert isinstance(new, LCT)
-
-        m_par = self(new.parent)
-        m = [None] * len(new)
-
-        # Each rule of the new program falls into one of 6 categories: ss, oo,
-        # o, rso, ro, base.
-
-        # Each rule in (ss ∪ oo ∪ o) inherits its clause measure from the rule
-        # in the parent that gave rise to it.
-        for i, r in new.ss.items():  m[r._index] = m_par.m[i]
-        for i, r in new.oo.items():  m[r._index] = m_par.m[i]
-        for i, r in new.o.items():   m[r._index] = m_par.m[i]
-
-        # Each of the remaining rules (those in {base} ∪ rso ∪ ro), have a
-        # measure of zero.
-        if 1:                        m[new.base._index] = Interval(0,0)
-        for r in new.rso.values():   m[r._index] = Interval(0,0)
-        for r in new.ro.values():    m[r._index] = Interval(0,0)
-
-        return measure_safety(m, new, m_par._safe)
-
 
 # This is a crude estimator of the smallest derivation measure - it's just
 # the number of non-size-zero items.

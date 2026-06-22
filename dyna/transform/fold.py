@@ -146,6 +146,47 @@ class Fold(TransformedProgram):
         # implementation shortcut: use the undo (unfold) program's derivation mapping
         return self.undo.Transform(self.undo.transform(d), self.parent)
 
+    def compute_measure(self, M):
+        "Fold-unfold safety measure for this (generalized) fold. `M` is the Measure context."
+        assert self.partially_safe
+        # Common-ancestor precondition. The fold's rule-measure relations only
+        # make sense if `parent` and `defs` descend from the same root program
+        # (so their measure variables were allocated against a shared rule-index
+        # basis). Build defs via `<root>.define(rule_text)` where <root> is the
+        # same root program as the fold's parent. We KEEP this as an assertion
+        # because failing it indicates a usage error (not a safety verdict) —
+        # the measure simply cannot be computed when measure-variable bases differ.
+        assert self.parent.root is self.defs.root, (
+            f"Fold's parent and defs must share a root program "
+            f"(got parent.root id={id(self.parent.root)}, "
+            f"defs.root id={id(self.defs.root)}). Build defs via "
+            f"`<root>.define(rule_text)` against the fold's root."
+        )
+        # Freshness precondition: any rule in `defs` not already in `parent`
+        # (and not in the shared root) introduces an equation the algebra
+        # cannot verify against parent's existing definitions. Return an
+        # unsafe measure rather than raising, so search/filter pipelines
+        # using `m.safe` reject these candidates cleanly.
+        if M._freshness_violations(self.parent, self.defs):
+            return M.zero_measure(self)
+        m_new = [None]*len(self)
+        m_parent = M(self.parent); m_defs = M(self.defs)
+        diffs = [m_parent.m[P] - m_defs.m[D] for P,D in self.par2def.items()]
+        m_r = M.Interval(M.Min([x.lo for x in diffs]), M.Max([x.hi for x in diffs]))
+        for N, r in enumerate(self):   # TODO: can't we do this without a loop?
+            if N == self.i:
+                m_new[N] = m_r
+            else:
+                m_new[N] = m_parent.m[self.parent.rules.index(r)]   # TODO: is/can this index tracked in the transformation metadata?
+        # Check the safety conditions for generalized fold.
+        safe = m_parent._safe + m_defs._safe
+        for (D,P) in self.def2par.items():
+            extra = M.min_size(self.bookkeeping[P].left) + M.min_size(self.bookkeeping[P].right)
+            safe.append(
+                (m_parent.m[P] - m_defs.m[D]).lo + extra > 0
+            )
+        return M.safety(m_new, self, safe)
+
 
 def term_signature(x):
     return (x.fn,x.arity) if isinstance(x, Term) else None

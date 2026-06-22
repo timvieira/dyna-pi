@@ -229,3 +229,24 @@ class Slash(TransformedProgram):
                 [o, s] = dd.body
                 name = getx(o)
                 return D_rso(d.head, o, D_ss(d)(slash(d.head, name), *left, s, *right))
+
+    def compute_measure(self, M):
+        "Fold-unfold safety measure for the slash transform. `M` is the Measure context."
+        m_par = M(self.parent)
+        m = [None] * len(self)
+
+        # Each rule of the new program falls into one of 6 categories: ss, oo,
+        # o, rso, ro, base.
+
+        # Each rule in (ss ∪ oo ∪ o) inherits its clause measure from the rule
+        # in the parent that gave rise to it.
+        for i, r in self.ss.items():  m[r._index] = m_par.m[i]
+        for i, r in self.oo.items():  m[r._index] = m_par.m[i]
+        for i, r in self.o.items():   m[r._index] = m_par.m[i]
+
+        # Each of the remaining rules (those in {base} ∪ rso ∪ ro) have measure zero.
+        m[self.base._index] = M.Interval(0, 0)
+        for r in self.rso.values():   m[r._index] = M.Interval(0, 0)
+        for r in self.ro.values():    m[r._index] = M.Interval(0, 0)
+
+        return M.safety(m, self, m_par._safe)
