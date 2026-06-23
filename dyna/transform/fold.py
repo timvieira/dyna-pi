@@ -101,46 +101,43 @@ class Fold(TransformedProgram):
         return (def2par, bookkeeping)
 
     def transform(self, d):
-        if isinstance(d, (Product, tuple, list)):
-            return Product(map(self.transform, d))
-        elif Derivation.base(d):
-            return d
-        elif d.i not in self.S:              # top rule was copied to new program
-            assert d.p == self.parent
-            I = self.rules.index(d.R)   # figure out the index of the copied rule in the new program
-            return self.d(I)(d.head, *self.transform(d.body))
-        else:   # rules that were replaced by the fold
-            assert d.p == self.parent
+        def node(n):
+            if n.i not in self.S:              # top rule was copied to new program
+                assert n.p == self.parent
+                I = self.rules.index(n.R)   # the index of the copied rule in the new program
+                return self.d(I)(n.head, *self.transform(n.body))
+            # rules that were replaced by the fold
+            assert n.p == self.parent
 
             if not self.partially_safe:
-                return self.rev.Transform(self.Transform(d, self.rev), self.rev.undo)
+                return self.rev.Transform(self.Transform(n, self.rev), self.rev.undo)
 
-            else:
-                # We have recorded that the top rule P of this derviation maps
-                # [via par2def] to a defining rule D.
-                def_rule_ix = self.par2def[d.i]
-                def_rule = self.defs.rules[def_rule_ix]
+            # We have recorded that the top rule P of this derivation maps
+            # [via par2def] to a defining rule D.
+            def_rule_ix = self.par2def[n.i]
+            def_rule = self.defs.rules[def_rule_ix]
 
-                # Use our recorded alignment of P's subgoals to D's subgoals
-                bookkeeping = self.bookkeeping[d.i]
+            # Use our recorded alignment of P's subgoals to D's subgoals
+            bookkeeping = self.bookkeeping[n.i]
 
-                # Note: Splitting uses some guess work to determined left vs. right
-                d_left = d.body[[i for i in bookkeeping.remaining if i <= self.j]]
-                d_middle = d.body[list(sorted(bookkeeping.align))]
-                d_right = d.body[[i for i in bookkeeping.remaining if i > self.j]]
+            # Note: Splitting uses some guess work to determined left vs. right
+            d_left = n.body[[i for i in bookkeeping.remaining if i <= self.j]]
+            d_middle = n.body[list(sorted(bookkeeping.align))]
+            d_right = n.body[[i for i in bookkeeping.remaining if i > self.j]]
 
-                # determine the unique substitution that makes the body of the
-                # derivation match the body of def_rule
-                θ = Subst()
-                for i,j in bookkeeping.align.items():
-                    θ.cover(def_rule.body[j], d.r.body[i])
+            # determine the unique substitution that makes the body of the
+            # derivation match the body of def_rule
+            θ = Subst()
+            for i, j in bookkeeping.align.items():
+                θ.cover(def_rule.body[j], n.r.body[i])
 
-                # The middle is where all the action happens
-                d_middle_new = self.defs.Transform(self.defs.d(def_rule_ix)(
-                    θ(def_rule.head), *self.Transform(d_middle, self.defs)
-                ), self.parent)
+            # The middle is where all the action happens
+            d_middle_new = self.defs.Transform(self.defs.d(def_rule_ix)(
+                θ(def_rule.head), *self.Transform(d_middle, self.defs)
+            ), self.parent)
 
-                return self.d(self.i)(d.head, *self.transform(d_left * d_middle_new * d_right))
+            return self.d(self.i)(n.head, *self.transform(d_left * d_middle_new * d_right))
+        return Derivation.map(d, node)
 
     def untransform(self, d):
         # implementation shortcut: use the undo (unfold) program's derivation mapping

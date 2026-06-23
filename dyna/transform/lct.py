@@ -139,34 +139,29 @@ class LCT(TransformedProgram):
         return any(unifies(x, y) for y in self._useful_other)
 
     def transform(self, d):
-        if isinstance(d, (tuple, list, Product)): return Product(map(self.transform, d))
-        if Derivation.base(d): return d
-        j = self.positions.get(d.i)
-        coarsen = self._parent_nodes.root
-        if j is None:
+        def node(n):
+            j = self.positions.get(n.i)
+            coarsen = self._parent_nodes.root
+            if j is None:
+                # handle cases of useless others
+                if self._is_useful_other(n.head):
+                    other = self.d(self.o[n.i]._index)(self._other(n.head), *self.transform(n.body))
+                    return self.d(None)(n.head, other)
+                return self.d(None)(n.head, *self.transform(n.body))
 
-            # handle cases of useless others
-            if self._is_useful_other(d.head):
-                other = self.d(self.o[d.i]._index)(self._other(d.head), *self.transform(d.body))
-                return self.d(None)(d.head, other)
+            if not unifies(n.head, self.x):
+                return self.d(None)(n.head, *self.transform(n.body))
+
+            x, spine = self.transform_spine(n, n, callback=lambda x: x)
+            # Apply recovery rules to promote spine into an actual derivation of n.head
+            if self.is_const(x):
+                other = x
+                [xxx] = x
             else:
-                return self.d(None)(d.head, *self.transform(d.body))
-
-        if not unifies(d.head, self.x):
-#            return self.d(self.oo[d.i]._index)(d.head, *d.body.transform(self))
-            return self.d(None)(d.head, *self.transform(d.body))
-
-        x, spine = self.transform_spine(d, d, callback = lambda x: x)
-        # Apply recovery rules to promote spine into an actual derivation of d.head
-
-        if self.is_const(x):
-            other = x
-            [xxx] = x
-        else:
-            other = self.d(self.o[x.i]._index)(self._other(x.head), *self.transform(x.body))
-
-            [xxx] = other.head.args
-        return self.d(self.rso[coarsen(d.head), coarsen(xxx)]._index)(d.head, spine, other)
+                other = self.d(self.o[x.i]._index)(self._other(x.head), *self.transform(x.body))
+                [xxx] = other.head.args
+            return self.d(self.rso[coarsen(n.head), coarsen(xxx)]._index)(n.head, spine, other)
+        return Derivation.map(d, node)
 
     def transform_spine(self, d, y, callback):
         j = self.positions.get(d.i) if not Derivation.base(d) else None

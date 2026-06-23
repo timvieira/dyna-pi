@@ -81,21 +81,18 @@ class Unfold(TransformedProgram):
         return self.manual_fold(r=self.r, j=self.j, S=self.new2def, defs=self.defs)
 
     def transform(self, d):
-        if isinstance(d, (Product, tuple, list)):
-            return Product([self.transform(x) for x in d])
-        elif Derivation.base(d):
-            return d
-        elif d.i == self.i:   # the unfolded rule
-            assert d.p == self.parent
-            d_left, d_middle, d_right = d.body[:self.j], d.body[self.j], d.body[self.j+1:]
-            d_middle_defs = self.Transform(d_middle, self.defs)
-            d_middle_new = self.defs.Transform(d_middle_defs.body, self.parent)
-            new_rule_ix = self.def2new[d_middle_defs.i]
-            return self.d(new_rule_ix)(d.head, *self.transform(d_left * d_middle_new * d_right))
-        else:
-            assert d.p == self.parent
-            I = self.rules.index(d.R)   # figure out the index of the copied rule in the new program
-            return self.d(I)(d.head, *self.transform(d.body))
+        def node(n):
+            if n.i == self.i:   # the unfolded rule
+                assert n.p == self.parent
+                d_left, d_middle, d_right = n.body[:self.j], n.body[self.j], n.body[self.j+1:]
+                d_middle_defs = self.Transform(d_middle, self.defs)
+                d_middle_new = self.defs.Transform(d_middle_defs.body, self.parent)
+                new_rule_ix = self.def2new[d_middle_defs.i]
+                return self.d(new_rule_ix)(n.head, *self.transform(d_left * d_middle_new * d_right))
+            assert n.p == self.parent
+            I = self.rules.index(n.R)   # the index of the copied rule in the new program
+            return self.d(I)(n.head, *self.transform(n.body))
+        return Derivation.map(d, node)
 
 #    def _untransform(self, d):
 #        rule = d.__rule__

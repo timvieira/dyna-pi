@@ -75,6 +75,18 @@ class Derivation(Rule):
         if Derivation.base(d): return 0
         return 1 + Derivation.height(d.body)
 
+    def map(d, node):
+        """Rebuild a derivation tree by walking it: a ``Product``/list maps elementwise, a base leaf
+        passes through unchanged, and a rule node is handed to ``node(d)`` -- which rebuilds it,
+        typically ``target.d(i)(d.head, *[Derivation.map(b, node) for b in d.body])``.  This is the
+        shared skeleton every ``transform``/``untransform`` derivation map factors through; each map
+        supplies only its per-node logic ``node``."""
+        if isinstance(d, (Product, tuple, list)):
+            return Product([Derivation.map(x, node) for x in d])
+        if Derivation.base(d):
+            return d
+        return node(d)
+
     def is_subtree(d, x):
         if d == x: return True
         if Derivation.base(d): return False

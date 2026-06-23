@@ -144,13 +144,9 @@ class Slash(TransformedProgram):
         return self.elim_p(0, **kwargs)
 
     def transform(self, d):
+        return Derivation.map(d, self._transform_node)
 
-        if isinstance(d, (list, tuple, Product)):
-            return Product(map(self.transform, d))
-
-        if Derivation.base(d):
-            return d
-
+    def _transform_node(self, d):   # `d` is a single rule node (Derivation.map handled Product/base)
         #tree = self.d(None)
         coarsen = self._parent_nodes.root
         slash = self._slash
