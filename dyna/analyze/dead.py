@@ -18,17 +18,17 @@ def prune_very_fast(program):
     return _hg_prune_very_fast(program)
 
 
-def prune_fast(program):
-    #with T['fast']: fast_result = _prune_fast(program)
-    #with T['very fast hg']: very_fast_result = _hg_prune_very_fast(program)
-    #with T['very fast prog']: very_fast_result = _prog_prune_very_fast(program)
-    #with T['slow']: slow_result = program.prune(specialize=False, max_depth=1)
-    #with T['slow-specialize']: slow_result = program.prune(max_depth=1)
-    #have_hg.assert_equal(want)
-    #have_trans.assert_equal(want)
-    #T.compare()
-    #return _hg_prune_very_fast(program)
-    return _prune_fast(program)
+#def prune_fast(program):
+#    #with T['fast']: fast_result = _prune_fast(program)
+#    #with T['very fast hg']: very_fast_result = _hg_prune_very_fast(program)
+#    #with T['very fast prog']: very_fast_result = _prog_prune_very_fast(program)
+#    #with T['slow']: slow_result = program.prune(specialize=False, max_depth=1)
+#    #with T['slow-specialize']: slow_result = program.prune(max_depth=1)
+#    #have_hg.assert_equal(want)
+#    #have_trans.assert_equal(want)
+#    #T.compare()
+#    #return _hg_prune_very_fast(program)
+#    return _prune_fast(program)
 
 
 # TODO: we should be able to use dyna programs in place of the hypergraph class.
@@ -152,7 +152,10 @@ class ProgramCoarsening:
                     yield (*v, *vs)
 
 
-def _prune_fast(program):
+# TODO: make a TransformedProgram subclass that can track the metadata, e.g.,
+# the coarsening.  It probably also makes sense to implement some of the
+# derivation mappings and rule measures.
+def prune_fast(program):
     "Prune based on superficial items in the program"
 
     assert program.inputs is not None and program.outputs is not None
