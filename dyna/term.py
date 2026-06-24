@@ -918,6 +918,7 @@ class NoDupsSet:
         Returns False otherwise.
         """
         # This implementation is pretty inefficient as it is based on linear scan
+        r = fresh(r)             # set-semantics: rename apart from the stored set (see MostGeneralSet)
         for s in self.xs:
             # branch r is already contained in set
             if self.same(r, s):    # pylint: disable=W1114
@@ -926,6 +927,7 @@ class NoDupsSet:
         return False
     def find(self, x):
         "Return the node in the set that covers x"
+        x = fresh(x)             # rename apart from the stored set
         for i, s in enumerate(self.xs):
             if self.same(s, x):
                 return i
@@ -960,10 +962,11 @@ class MostGeneralSet:
         Returns False otherwise.
         """
         # This implementation is pretty inefficient as it is based on linear scan
-        rm = []
-        for i, s in enumerate(self.xs):
-            # branch r is already subsumed by branch s
-            if self.covers(s, r):    # pylint: disable=W1114
+        r = fresh(r)             # `covers` is a SET relation -> compare r against the stored set with
+        rm = []                  # variables taken INDEPENDENTLY; stored entries may share interned
+        for i, s in enumerate(self.xs):   # canonical names ($X0...) so without renaming apart a
+            # branch r is already subsumed by branch s   # structured position vs a same-named var
+            if self.covers(s, r):    # pylint: disable=W1114   # fails to subsume (overlaps left unmerged).
                 return True
             # new branch subsumes existing branch, will be deleted in favor of
             # the more general branch.
@@ -975,6 +978,7 @@ class MostGeneralSet:
         return False
     def find(self, x):
         "Return the node in the set that covers x"
+        x = fresh(x)             # rename apart from the stored set (see `add`)
         for i, s in enumerate(self.xs):
             # branch r is already subsumed by branch s
             if self.covers(s, x):    # pylint: disable=W1114
@@ -1009,14 +1013,22 @@ class DisjointEstimate:
     def add(self, r):
         "Add r to the collection while maintaining disjointness."
         # This implementation is pretty inefficient as it is based on linear scan
-        for i in reversed(range(len(self.xs))):       # back to front so we can delete
+        # INVARIANT: stored entries are canonical, so they all SHARE interned variable identities
+        # ($X0...), and `unifies`/`generalizer` compare vars by identity.  Keep the working term `r`
+        # renamed APART from that namespace -- so every `unifies(r, stored)` tests genuine pattern
+        # overlap (no spurious occurs-check, e.g. `st($X0,0)` vs `$X0`) and overlapping patterns
+        # actually merge.  Two freshenings maintain it: on entry, and after each `generalizer` (which
+        # can re-inject the matched entry's vars).  O(#merges), not O(#entries), freshenings per add.
+        r = fresh(r)
+        for i in reversed(range(len(self.xs))):
             if unifies(r, self.xs[i]):   # overlaps
-                r = generalizer(r, self.xs[i])
+                r = fresh(generalizer(r, self.xs[i]))
                 del self.xs[i]
         self.xs.append(canonicalize(r))
     def find_all(self, x):
         "Return the unique branch of the partition that x falls into (or throw an error)"
         index = []
+        x = fresh(x)                     # freshen the query ONCE apart from the interned stored set (see `add`)
         for i, s in enumerate(self.xs):
             if unifies(x, s):
                 index.append(i)

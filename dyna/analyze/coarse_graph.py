@@ -165,6 +165,26 @@ def test_coarsen():
     """)
 
 
+def test_coarse_overlapping_patterns():
+    # Regression (the "old failure"): a predicate appearing with a doubly-structured pattern
+    # (`st(_,0)` and `st(_,1)`), a diagonal (`span(A,B,A,B)`), and a pos0-structured/pos2-var rule made
+    # the coarse-graph `DisjointEstimate` leave TWO overlapping `span/4` type-patterns unmerged -- so
+    # `nodes.root` of a doubly-structured atom raised "did not find a unique type".  (Surfaced while
+    # magic-solving a Defun+span program; root cause: set-relation comparisons must rename apart.)
+    p = Program("""
+    inputs: p(_). outputs: goal.
+    goal += span(st(W,0),G10,st(H,1),G11) * p(W).
+    span(A,B,A,B) += 1.
+    span(st(S,0),Buf,G3,G4) += p(S).
+    span(st(S2,1),G14,G7,G8) += p(S2).
+    """)
+    cg = p._coarse_graph()                                  # must not raise
+    span_nodes = [x for x in cg.nodes if str(x).startswith('span')]
+    assert len(span_nodes) == 1, span_nodes                # overlapping patterns collapse to one
+    assert_disjoint(cg.nodes)                               # and the partition stays disjoint
+    p.scc_solver(solver=2, magic=True)                     # the full magic path is reachable
+
+
 def test_coarse_hypergraph():
     from dyna import canonicalize
 
