@@ -336,6 +336,10 @@ class Term:
         return y
 
     @property
+    def signature(self):
+        return (self.fn, self.arity)
+
+    @property
     def fn(self):
         return snap(self.fargs[0])
 
