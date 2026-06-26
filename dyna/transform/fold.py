@@ -186,7 +186,7 @@ class Fold(TransformedProgram):
 
 
 def term_signature(x):
-    return (x.fn,x.arity) if isinstance(x, Term) else None
+    return x.signature if isinstance(x, Term) else None
 
 
 # The utility is only used by reversible folds which appear to require searching
