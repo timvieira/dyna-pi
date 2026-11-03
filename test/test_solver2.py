@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from arsenal import assert_throws
 
 from dyna import Program, InstFault
@@ -323,6 +324,7 @@ def test_builtin_constraint_dispatch():
         Solver(p)()
 
 
+@pytest.mark.timelimit
 def test_budgets():
     from arsenal.robust import Timeout
     from arsenal.assertions import assert_throws

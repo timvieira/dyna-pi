@@ -39,9 +39,12 @@ dev = [
 include = ["dyna*"]
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules"
+addopts = "--doctest-modules -rs"
 testpaths = ["test", "dyna"]
 timeout = 30
+markers = [
+    "timelimit: relies on arsenal's SIGALRM-based timelimit; skipped under --cov (see test/conftest.py)",
+]
 
 [tool.coverage.run]
 branch = true

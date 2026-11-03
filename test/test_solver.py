@@ -1,3 +1,4 @@
+import pytest
 from arsenal.robust import Timeout
 from arsenal.assertions import assert_throws
 
@@ -5,6 +6,7 @@ from dyna.execute.solver import Solver
 from dyna import Program, SolverLimitation, InstFault
 
 
+@pytest.mark.timelimit
 def test_budgets():
 
     p = Program("""

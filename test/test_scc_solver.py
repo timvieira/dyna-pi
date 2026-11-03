@@ -213,7 +213,17 @@ def test_ground_term_growth_needs_magic():
     goal += 1.
     """)
 
-    # The bare bounding pass diverges — pass-1 must be budget-truncated.
+
+@pytest.mark.timelimit
+def test_ground_term_growth_bare_diverges():
+    # Same program as `test_ground_term_growth_needs_magic`, without magic:
+    # the bare bounding pass diverges — pass-1 must be budget-truncated.
+    p = Program("""
+    f(0).
+    f(g(X)) += f(X).
+    goal += f(g(g(g(0)))).
+    """, '', 'goal.')
+
     d_bare = p.scc_solver(solver=2, magic=False, budget=.2)
     assert d_bare.pass1_interrupted, 'bare Boolean pass should diverge'
 
